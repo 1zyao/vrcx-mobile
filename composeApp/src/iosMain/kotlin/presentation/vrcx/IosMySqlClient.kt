@@ -1,20 +1,14 @@
 package io.github.vrcmteam.vrcm.presentation.vrcx
 
-import kotlinx.cinterop.ByteVar
-import kotlinx.cinterop.CPointer
 import kotlinx.cinterop.CPointerVar
 import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.cinterop.addressOf
 import kotlinx.cinterop.alloc
-import kotlinx.cinterop.allocArray
 import kotlinx.cinterop.convert
 import kotlinx.cinterop.memScoped
 import kotlinx.cinterop.ptr
-import kotlinx.cinterop.reinterpret
-import kotlinx.cinterop.usePinned
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import io.github.vrcmteam.vrcm.nativecrypto.CC_SHA1
 import platform.posix.AF_INET
 import platform.posix.SOCK_STREAM
 import platform.posix.addrinfo
@@ -77,13 +71,13 @@ private class MySqlConnection(private val host: String, private val port: Int) {
         val result = alloc<CPointerVar<addrinfo>>()
         check(getaddrinfo(host, port.toString(), hints.ptr, result.ptr) == 0) { "无法解析 MySQL 主机" }
         try {
-            val address = result.pointed ?: error("MySQL 地址为空")
+            val address = result.value ?: error("MySQL 地址为空")
             fd = socket(address.pointed.ai_family, address.pointed.ai_socktype, address.pointed.ai_protocol)
             check(fd >= 0 && connect(fd, address.pointed.ai_addr, address.pointed.ai_addrlen) == 0) {
                 "无法连接 MySQL: $host:$port"
             }
         } finally {
-            freeaddrinfo(result.pointed)
+            result.value?.let(::freeaddrinfo)
         }
         val handshake = parseHandshake(readPacket())
         require(handshake.plugin == "mysql_native_password") {
@@ -202,12 +196,7 @@ private fun parseHandshake(packet: ByteArray): MySqlHandshake {
     return MySqlHandshake(first + second, plugin)
 }
 
-@OptIn(ExperimentalForeignApi::class)
-private fun sha1(value: ByteArray): ByteArray = memScoped {
-    val digest = allocArray<ByteVar>(20)
-    value.usePinned { CC_SHA1(it.addressOf(0).reinterpret(), value.size.convert(), digest) }
-    ByteArray(20) { digest[it].value }
-}
+private fun sha1(value: ByteArray) = VrcxCrypto.sha1(value)
 
 private fun mysqlNativePassword(password: ByteArray, scramble: ByteArray): ByteArray {
     if (password.isEmpty()) return ByteArray(0)

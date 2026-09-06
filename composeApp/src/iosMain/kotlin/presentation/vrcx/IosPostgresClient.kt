@@ -4,19 +4,10 @@ import kotlinx.cinterop.ByteVar
 import kotlinx.cinterop.CPointer
 import kotlinx.cinterop.CPointerVar
 import kotlinx.cinterop.ExperimentalForeignApi
-import kotlinx.cinterop.UByteVar
-import kotlinx.cinterop.addressOf
-import kotlinx.cinterop.alloc
-import kotlinx.cinterop.allocArray
-import kotlinx.cinterop.convert
 import kotlinx.cinterop.memScoped
 import kotlinx.cinterop.ptr
-import kotlinx.cinterop.usePinned
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import io.github.vrcmteam.vrcm.nativecrypto.CCHmac
-import io.github.vrcmteam.vrcm.nativecrypto.CC_SHA256
-import io.github.vrcmteam.vrcm.nativecrypto.kCCHmacAlgSHA256
 import platform.posix.AF_INET
 import platform.posix.SOCK_STREAM
 import platform.posix.addrinfo
@@ -100,7 +91,8 @@ private class SocketConnection(private val host: String, private val port: Int) 
         val rows = mutableListOf<List<Any?>>()
         var columns = 0
         while (true) {
-            when (val message = readMessage()) {
+            val message = readMessage()
+            when (message[0].toInt() and 255) {
                 'T'.code -> columns = message.intAt(0)
                 'D'.code -> rows += message.readDataRow(columns)
                 'C'.code -> Unit
@@ -168,13 +160,13 @@ private class SocketConnection(private val host: String, private val port: Int) 
         val result = alloc<CPointerVar<addrinfo>>()
         check(getaddrinfo(host, port.toString(), hints.ptr, result.ptr) == 0) { "无法解析 PostgreSQL 主机" }
         try {
-            val address = result.pointed ?: error("PostgreSQL 地址为空")
+            val address = result.value ?: error("PostgreSQL 地址为空")
             fd = socket(address.pointed.ai_family, address.pointed.ai_socktype, address.pointed.ai_protocol)
             check(fd >= 0 && connect(fd, address.pointed.ai_addr, address.pointed.ai_addrlen) == 0) {
                 "无法连接 PostgreSQL: $host:$port"
             }
         } finally {
-            freeaddrinfo(result.pointed)
+            result.value?.let(::freeaddrinfo)
         }
     }
 
@@ -183,32 +175,32 @@ private class SocketConnection(private val host: String, private val port: Int) 
         body.writeInt(4 + payload.size, 0)
         payload.copyInto(body, 4)
         val packet = if (type == null) body else byteArrayOf(type) + body
-        packet.usePinned { pinned -> writeAll(pinned.addressOf(0), packet.size) }
+        writeAll(packet)
     }
 
     private fun readMessage(): ByteArray {
         val type = ByteArray(1)
-        type.usePinned { readAll(it.addressOf(0), 1) }
+        readAll(type)
         val length = ByteArray(4)
-        length.usePinned { readAll(it.addressOf(0), 4) }
+        readAll(length)
         val payload = ByteArray(length.readInt(0) - 4)
-        payload.usePinned { readAll(it.addressOf(0), payload.size) }
+        readAll(payload)
         return byteArrayOf(type[0]) + payload
     }
 
-    private fun writeAll(pointer: CPointer<ByteVar>, size: Int) {
+    private fun writeAll(bytes: ByteArray) = bytes.usePinned { pinned ->
         var offset = 0
-        while (offset < size) {
-            val written = write(fd, pointer + offset, (size - offset).convert())
+        while (offset < bytes.size) {
+            val written = write(fd, pinned.addressOf(offset), (bytes.size - offset).convert())
             check(written > 0) { "PostgreSQL 写入失败" }
             offset += written.toInt()
         }
     }
 
-    private fun readAll(pointer: CPointer<ByteVar>, size: Int) {
+    private fun readAll(bytes: ByteArray) = bytes.usePinned { pinned ->
         var offset = 0
-        while (offset < size) {
-            val count = read(fd, pointer + offset, (size - offset).convert())
+        while (offset < bytes.size) {
+            val count = read(fd, pinned.addressOf(offset), (bytes.size - offset).convert())
             check(count > 0) { "PostgreSQL 连接已断开" }
             offset += count.toInt()
         }
@@ -219,23 +211,9 @@ private fun scramName(value: String) = value.replace("=", "=3D").replace(",", "=
 
 private fun randomNonce(): String = Base64.encode(Random.nextBytes(18))
 
-@OptIn(ExperimentalForeignApi::class)
-private fun sha256(value: ByteArray): ByteArray = memScoped {
-    val result = allocArray<UByteVar>(32)
-    value.usePinned { CC_SHA256(it.addressOf(0).reinterpret(), value.size.convert(), result) }
-    ByteArray(32) { result[it].toByte() }
-}
+private fun sha256(value: ByteArray) = VrcxCrypto.sha256(value)
 
-@OptIn(ExperimentalForeignApi::class)
-private fun hmac(key: ByteArray, value: ByteArray): ByteArray = memScoped {
-    val result = allocArray<UByteVar>(32)
-    key.usePinned { keyPin ->
-        value.usePinned { valuePin ->
-            CCHmac(kCCHmacAlgSHA256, keyPin.addressOf(0).reinterpret(), key.size.convert(), valuePin.addressOf(0).reinterpret(), value.size.convert(), result)
-        }
-    }
-    ByteArray(32) { result[it].toByte() }
-}
+private fun hmac(key: ByteArray, value: ByteArray) = VrcxCrypto.hmacSha256(key, value)
 
 private fun hi(password: ByteArray, salt: ByteArray, iterations: Int): ByteArray {
     var result = hmac(password, salt + byteArrayOf(0, 0, 0, 1))

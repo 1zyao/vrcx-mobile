@@ -3,11 +3,11 @@ app-code = "7"
 app-version = "1.1.2"
 app-name = "VRCM"
 app-packageName = "io.github.vrcmteam.vrcm"
-agp = "8.10.1"
-kotlin = "2.2.20"
-kotlinx-coroutines = "1.10.1"
+agp = "9.3.1"
+kotlin = "2.4.10"
+kotlinx-coroutines = "1.11.0"
 kotlinx-atomicfu = "0.27.0"
-kotlinx-datetime = "0.7.1"
+kotlinx-datetime = "0.8.0"
 android-minSdk = "26"
 android-compileSdk = "36"
 android-targetSdk = "35"
@@ -28,13 +28,16 @@ robolectric = "4.16.1"
 filekit = "0.11.0"
 qrose = "1.0.1"
 jna = "5.17.0"
-pgjdbc = "42.7.13"
-mariadb = "3.5.10"
 okio = "3.16.4"
 awebp = "3.0.5"
 room = "2.8.4"
 sqlite = "2.6.2"
-ksp = "2.2.20-2.0.4"
+ksp = "2.3.10"
+sqlx4k = "1.13.0"
+pgjdbc = "42.7.13"
+mariadb = "3.5.10"
+log4k = "2.3.0"
+jsqlparser = "5.3"
 
 [libraries]
 # kotlinx
@@ -79,8 +82,6 @@ coil-network-ktor = { module = "io.coil-kt.coil3:coil-network-ktor3", version.re
 
 robolectric = { module = "org.robolectric:robolectric", version.ref = "robolectric" }
 jna-platform = { module = "net.java.dev.jna:jna-platform", version.ref = "jna" }
-pgjdbc = { module = "org.postgresql:postgresql", version.ref = "pgjdbc" }
-mariadb = { module = "org.mariadb.jdbc:mariadb-java-client", version.ref = "mariadb" }
 okio = { module = "com.squareup.okio:okio", version.ref = "okio" }
 okio-fakefilesystem = { module = "com.squareup.okio:okio-fakefilesystem", version.ref = "okio" }
 awebp = { module = "com.github.penfeizhou.android.animation:awebp", version.ref = "awebp" }
@@ -88,6 +89,12 @@ androidx-room-runtime = { module = "androidx.room:room-runtime", version.ref = "
 androidx-room-compiler = { module = "androidx.room:room-compiler", version.ref = "room" }
 androidx-sqlite-framework = { module = "androidx.sqlite:sqlite-framework", version.ref = "sqlite" }
 androidx-sqlite-bundled = { module = "androidx.sqlite:sqlite-bundled", version.ref = "sqlite" }
+sqlx4k-postgres = { module = "io.github.smyrgeorge:sqlx4k-postgres", version.ref = "sqlx4k" }
+sqlx4k-mysql = { module = "io.github.smyrgeorge:sqlx4k-mysql", version.ref = "sqlx4k" }
+pgjdbc = { module = "org.postgresql:postgresql", version.ref = "pgjdbc" }
+mariadb = { module = "org.mariadb.jdbc:mariadb-java-client", version.ref = "mariadb" }
+log4k = { module = "io.github.smyrgeorge:log4k", version.ref = "log4k" }
+jsqlparser = { module = "com.github.jsqlparser:jsqlparser", version.ref = "jsqlparser" }
 
 # chrisbanes-haze
 chrisbanes-haze = { module = "dev.chrisbanes.haze:haze", version.ref = "chrisbanes-haze" }

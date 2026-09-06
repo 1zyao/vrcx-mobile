@@ -9,10 +9,7 @@ private val vrcxJson = Json { ignoreUnknownKeys = true; encodeDefaults = true }
 private val vrcxKeychain = IosKeychainSecureStorage("io.github.vrcmteam.vrcm.vrcx")
 
 actual fun createVrcxDatabaseClient(config: RemoteDatabaseConfig): ReadOnlyDatabaseClient =
-    when (config.databaseType) {
-        RemoteDatabaseType.PostgreSQL -> IosPostgresClient(config)
-        RemoteDatabaseType.MySQL -> IosMySqlClient(config)
-    }
+    Sqlx4kDatabaseClient(config)
 
 actual fun loadVrcxConnectionConfig(): RemoteDatabaseConfig? = runCatching {
     vrcxKeychain.get(CONNECTION_KEY)?.let {

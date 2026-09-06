@@ -54,6 +54,8 @@ kotlin {
         iosMain.dependencies {
             implementation(libs.ktor.client.darwin)
             implementation(libs.androidx.sqlite.bundled)
+            implementation(libs.sqlx4k.postgres)
+            implementation(libs.sqlx4k.mysql)
         }
 
         val desktopMain by getting
@@ -64,10 +66,11 @@ kotlin {
             implementation(compose.desktop.currentOs)
 
             implementation(libs.ktor.client.okhttp)
-            implementation(libs.jna.platform)
-            implementation(libs.androidx.sqlite.bundled)
             implementation(libs.pgjdbc)
             implementation(libs.mariadb)
+            implementation(libs.jna.platform)
+            implementation(libs.androidx.sqlite.bundled)
+            implementation(libs.jsqlparser)
         }
 
         val desktopTest by getting
@@ -118,7 +121,8 @@ kotlin {
             implementation(libs.filekit.dialogs.compose)
             implementation(libs.qrose)
 
-            implementation(libs.androidx.room.runtime)
+              implementation(libs.androidx.room.runtime)
+              implementation(libs.log4k)
 
 //            implementation(libs.kamel)
         }
@@ -174,6 +178,9 @@ android {
     packaging {
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
+            excludes += "/META-INF/INDEX.LIST"
+            excludes += "/META-INF/CHANGELOG"
+            excludes += "/META-INF/io.netty.versions.properties"
         }
     }
 

@@ -94,8 +94,8 @@ internal fun VrcxConnectionEditor(
                 .distinct().sorted()
         } else {
             client.query(
-                "SELECT table_name FROM information_schema.tables WHERE table_schema = :database AND table_name LIKE :pattern ESCAPE '\\' ORDER BY table_name",
-                mapOf("database" to candidate.database, "pattern" to "%\\_feed\\_%"),
+                "SELECT table_name FROM information_schema.tables WHERE table_schema = :database ORDER BY table_name",
+                mapOf("database" to candidate.database),
             ).mapNotNull { row -> extractAccountPrefix(row.firstOrNull()?.toString(), "^([A-Za-z_][A-Za-z0-9_]*)_feed_(gps|status|bio|avatar|online_offline)$") }
                 .distinct().sorted()
         }

@@ -110,40 +110,6 @@ internal fun VrcxConnectionEditor(
             }
     }
 
-    fun discoverAccounts() {
-        val candidate = readConfig(requireAccount = false) ?: return
-        scope.launch {
-            isDiscovering = true
-            feedback = null
-            feedbackIsError = false
-            try {
-                accountPrefixes = discoverAccounts(candidate)
-                when (accountPrefixes.size) {
-                    0 -> {
-                        feedback = "未发现可用的 VRCX 账号，请确认只读用户有元数据权限"
-                        feedbackIsError = true
-                    }
-                    1 -> {
-                        accountPrefix = accountPrefixes.single()
-                        feedback = "已发现账号：$accountPrefix"
-                    }
-                    else -> {
-                        accountPrefix = ""
-                        accountDialogOpen = true
-                        feedback = "发现多个账号，请选择一个"
-                    }
-                }
-            } catch (cancelled: CancellationException) {
-                throw cancelled
-            } catch (throwable: Throwable) {
-                feedback = throwable.message ?: throwable::class.simpleName ?: "账号发现失败"
-                feedbackIsError = true
-            } finally {
-                isDiscovering = false
-            }
-        }
-    }
-
     Column(
         modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
@@ -187,25 +153,11 @@ internal fun VrcxConnectionEditor(
             password, { password = it }, Modifier.fillMaxWidth(), label = { Text("密码") }, singleLine = true,
             visualTransformation = PasswordVisualTransformation(),
         )
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Box(Modifier.weight(1f)) {
-                OutlinedButton(
-                    enabled = !isDiscovering,
-                    onClick = { accountDialogOpen = true },
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Text(accountPrefix.ifBlank { "选择 VRCX 账号" })
-                }
-            }
-            OutlinedButton(enabled = !isDiscovering, onClick = ::discoverAccounts) {
-                if (isDiscovering) CircularProgressIndicator() else Text("发现账号")
-            }
-        }
         Text(
             if (databaseType == RemoteDatabaseType.PostgreSQL) {
-                "连接后自动读取 account_<前缀> schema"
+                "点击保存配置时自动读取 account_<前缀> schema"
             } else {
-                "连接后自动读取 <前缀>_feed_* 表"
+                "点击保存配置时自动读取 <前缀>_feed_* 表"
             },
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -258,15 +210,6 @@ internal fun VrcxConnectionEditor(
                 enabled = !isDiscovering && !isTesting,
                 onClick = {
                     val candidate = readConfig(requireAccount = false) ?: return@Button
-                    if (accountPrefix.isNotBlank() && accountPrefix in accountPrefixes) {
-                        runCatching { saveVrcxConnectionConfig(candidate.copy(accountPrefix = accountPrefix)) }
-                            .onSuccess { onSaved() }
-                            .onFailure {
-                                feedback = it.message ?: "保存失败"
-                                feedbackIsError = true
-                            }
-                        return@Button
-                    }
                     scope.launch {
                         isDiscovering = true
                         feedback = null

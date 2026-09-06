@@ -20,6 +20,17 @@ jobs:
           java-version: '17'
           distribution: 'temurin'
 
+      - name: Cache Gradle and Kotlin/Native
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+            ~/.konan
+          key: ${{ runner.os }}-gradle-konan-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties', 'gradle/libs.versions.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-gradle-konan-
+
       - name: Generate Debug Keystore File # 生成调试用的 keystore 文件
         run: |
           keytool -genkeypair -noprompt \

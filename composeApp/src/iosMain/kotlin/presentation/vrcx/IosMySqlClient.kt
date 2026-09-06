@@ -74,7 +74,7 @@ private class MySqlConnection(private val host: String, private val port: Int) {
         val result = alloc<CPointerVar<addrinfo>>()
         check(getaddrinfo(host, port.toString(), hints.ptr, result.ptr) == 0) { "无法解析 MySQL 主机" }
         try {
-            val address = result.pointed
+            val address = result.value ?: error("无法解析 MySQL 主机")
             fd = socket(address.pointed.ai_family, address.pointed.ai_socktype, address.pointed.ai_protocol)
             check(fd >= 0 && connect(fd, address.pointed.ai_addr, address.pointed.ai_addrlen) == 0) {
                 "无法连接 MySQL: $host:$port"
@@ -87,8 +87,8 @@ private class MySqlConnection(private val host: String, private val port: Int) {
             "iOS MySQL 驱动暂不支持 ${handshake.plugin}，仅支持 mysql_native_password"
         }
         val response = MySqlPacketBuilder()
-            .int(0x00088205)
-            .int(16 * 1024 * 1024)
+            .intValue(0x00088205)
+            .intValue(16 * 1024 * 1024)
             .byte(33)
             .zeros(23)
             .cstring(config.username)
@@ -227,7 +227,7 @@ private fun readLength(packet: ByteArray, start: Int): Triple<Long, Int, String?
 private class MySqlPacketBuilder {
     private val bytes = mutableListOf<Byte>()
     fun byte(value: Int) { bytes += value.toByte() }
-    fun int(value: Int) { repeat(4) { byte(value shr (it * 8)) } }
+    fun intValue(value: Int) { repeat(4) { byte(value shr (it * 8)) } }
     fun zeros(count: Int) { repeat(count) { byte(0) } }
     fun cstring(value: String) { bytes += value.encodeToByteArray().toList(); byte(0) }
     fun lengthBytes(value: ByteArray) { byte(value.size); bytes += value.toList() }

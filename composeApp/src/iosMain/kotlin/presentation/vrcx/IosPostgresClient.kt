@@ -77,7 +77,7 @@ private class SocketConnection(private val host: String, private val port: Int) 
     fun startup(config: RemoteDatabaseConfig) {
         connectSocket()
         val payload = byteArray {
-            int(196608)
+            intValue(196608)
             cstring("user"); cstring(config.username)
             cstring("database"); cstring(config.database)
             cstring("application_name"); cstring("vrcx-mobile-ios")
@@ -166,7 +166,7 @@ private class SocketConnection(private val host: String, private val port: Int) 
         val result = alloc<CPointerVar<addrinfo>>()
         check(getaddrinfo(host, port.toString(), hints.ptr, result.ptr) == 0) { "无法解析 PostgreSQL 主机" }
         try {
-            val address = result.pointed
+            val address = result.value ?: error("无法解析 PostgreSQL 主机")
             fd = socket(address.pointed.ai_family, address.pointed.ai_socktype, address.pointed.ai_protocol)
             check(fd >= 0 && connect(fd, address.pointed.ai_addr, address.pointed.ai_addrlen) == 0) {
                 "无法连接 PostgreSQL: $host:$port"
@@ -235,7 +235,7 @@ private fun ByteArray.xor(other: ByteArray) = ByteArray(size) { (this[it].toInt(
 
 private class PostgresPacketBuilder {
     private val bytes = mutableListOf<Byte>()
-    fun int(value: Int) { bytes += byteArrayOf((value shr 24).toByte(), (value shr 16).toByte(), (value shr 8).toByte(), value.toByte()).toList() }
+    fun intValue(value: Int) { bytes += byteArrayOf((value shr 24).toByte(), (value shr 16).toByte(), (value shr 8).toByte(), value.toByte()).toList() }
     fun byte(value: Int) { bytes += value.toByte() }
     fun cstring(value: String) { bytes += value.encodeToByteArray().toList(); byte(0) }
     fun build() = bytes.toByteArray()

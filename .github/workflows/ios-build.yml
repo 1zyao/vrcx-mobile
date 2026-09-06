@@ -42,8 +42,13 @@ jobs:
           xcodebuild -version
           java -version
 
+      - name: Build Kotlin iOS frameworks
+        run: |
+          bash ./gradlew :composeApp:linkDebugFrameworkIosSimulatorArm64 :composeApp:linkDebugFrameworkIosArm64 --no-daemon
+
       - name: Build iOS simulator app
         run: |
+          export OVERRIDE_KOTLIN_BUILD_IDE_SUPPORTED=YES
           xcodebuild \
             -project iosApp/iosApp.xcodeproj \
             -scheme iosApp \
@@ -75,6 +80,7 @@ jobs:
       - name: Build iOS device archive
         run: |
           set -euo pipefail
+          export OVERRIDE_KOTLIN_BUILD_IDE_SUPPORTED=YES
           xcodebuild \
             -project iosApp/iosApp.xcodeproj \
             -scheme iosApp \

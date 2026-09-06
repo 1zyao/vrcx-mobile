@@ -4,10 +4,13 @@ import kotlinx.cinterop.CPointer
 import kotlinx.cinterop.CPointerVar
 import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.cinterop.addressOf
+import kotlinx.cinterop.alloc
 import kotlinx.cinterop.convert
 import kotlinx.cinterop.memScoped
+import kotlinx.cinterop.pointed
 import kotlinx.cinterop.ptr
 import kotlinx.cinterop.usePinned
+import kotlinx.cinterop.value
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import platform.posix.AF_INET
@@ -156,7 +159,7 @@ private class SocketConnection(private val host: String, private val port: Int) 
     }
 
     private fun connectSocket() = memScoped {
-        val hints = addrinfo().apply {
+        val hints = alloc<addrinfo>().apply {
             ai_family = AF_INET
             ai_socktype = SOCK_STREAM
         }

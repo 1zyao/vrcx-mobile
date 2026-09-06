@@ -3,10 +3,13 @@ package io.github.vrcmteam.vrcm.presentation.vrcx
 import kotlinx.cinterop.CPointerVar
 import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.cinterop.addressOf
+import kotlinx.cinterop.alloc
 import kotlinx.cinterop.convert
 import kotlinx.cinterop.memScoped
+import kotlinx.cinterop.pointed
 import kotlinx.cinterop.ptr
 import kotlinx.cinterop.usePinned
+import kotlinx.cinterop.value
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import platform.posix.AF_INET
@@ -67,7 +70,7 @@ private class MySqlConnection(private val host: String, private val port: Int) {
     private var sequence = 0
 
     fun connect(config: RemoteDatabaseConfig) = memScoped {
-        val hints = addrinfo().apply { ai_family = AF_INET; ai_socktype = SOCK_STREAM }
+        val hints = alloc<addrinfo>().apply { ai_family = AF_INET; ai_socktype = SOCK_STREAM }
         val result = alloc<CPointerVar<addrinfo>>()
         check(getaddrinfo(host, port.toString(), hints.ptr, result.ptr) == 0) { "无法解析 MySQL 主机" }
         try {

@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -14,6 +15,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -34,7 +36,6 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -42,6 +43,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -67,6 +69,7 @@ import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlin.time.ExperimentalTime
 import kotlin.time.Instant
 import kotlinx.datetime.TimeZone
@@ -90,6 +93,7 @@ fun VrcxMobileScreen(
     var filter by remember { mutableStateOf(FeedFilter()) }
     var searchText by remember { mutableStateOf("") }
     var userIcons by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
+    val listState = rememberLazyListState()
     val usersApi: UsersApi = koinInject()
     val locale = strings
 
@@ -152,6 +156,20 @@ fun VrcxMobileScreen(
     }
 
     LaunchedEffect(Unit) { if (!isPreview) runLoad(reset = true) }
+    LaunchedEffect(listState, isPreview) {
+        if (isPreview) return@LaunchedEffect
+        snapshotFlow {
+            val layoutInfo = listState.layoutInfo
+            val lastVisibleIndex = layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: -1
+            lastVisibleIndex to layoutInfo.totalItemsCount
+        }.distinctUntilChanged().collect { (lastVisibleIndex, totalItemsCount) ->
+            if (hasMore && !isLoading && totalItemsCount > 0 &&
+                lastVisibleIndex >= totalItemsCount - 3
+            ) {
+                runLoad(reset = false)
+            }
+        }
+    }
     LaunchedEffect(events, isPreview) {
         if (isPreview || SharedFlowCentre.currentSession.value == null) return@LaunchedEffect
         val missingIds = events.asSequence()
@@ -209,7 +227,13 @@ fun VrcxMobileScreen(
                 isRefreshing = isLoading && !isPreview,
                 doRefresh = { runLoad(reset = true) },
             ) {
-                LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                LazyColumn(
+                    state = listState,
+                    contentPadding = PaddingValues(
+                        bottom = getInsetPadding(12, WindowInsets::getBottom) + 80.dp,
+                    ),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
                     when {
                         shownEvents.isEmpty() && isLoading -> item {
                             Box(Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {
@@ -233,10 +257,7 @@ fun VrcxMobileScreen(
                                     ) {
                                         CircularProgressIndicator()
                                     }
-                                    hasMore -> OutlinedButton(
-                                        onClick = { runLoad(reset = false) },
-                                        modifier = Modifier.fillMaxWidth(),
-                                    ) { Text(strings.vrcxLoadMore) }
+                                    hasMore -> Unit
                                     else -> Text(
                                         strings.vrcxEndOfFeed,
                                         modifier = Modifier.fillMaxWidth().padding(12.dp),
@@ -364,18 +385,10 @@ private data class FeedEventText(val headline: String, val subtitle: String?, va
 private fun describe(event: VrcxFeedEvent, locale: LocaleStrings): FeedEventText = when (event.type) {
     FeedType.GPS -> {
         val location = parseFeedLocation(event.location)
-        val previousLocation = parseFeedLocation(event.previousLocation)
         FeedEventText(
-            headline = buildString {
-                append(locale.vrcxLocationChanged)
-                if (event.worldName != null) append(" · ${event.worldName}")
-            },
-            subtitle = when {
-                location != null && previousLocation != null && location.worldId != previousLocation.worldId ->
-                    "${previousLocation.worldId} → ${location.worldId}"
-                location != null -> "${locale.vrcxEnter} ${location.worldId}"
-                else -> null
-            },
+            headline = locale.vrcxLocationChanged,
+            // VRCX 的 world ID 只用于查询，不直接展示给用户。
+            subtitle = event.worldName?.let { "${locale.vrcxEnter} $it" },
             meta = listOfNotNull(
                 event.groupName?.let { "${locale.vrcxGroup} $it" },
                 event.worldName?.let { "${locale.vrcxWorld}：$it" },

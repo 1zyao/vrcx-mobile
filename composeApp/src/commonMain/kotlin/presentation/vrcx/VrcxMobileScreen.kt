@@ -160,7 +160,7 @@ fun VrcxMobileScreen(
             .distinct()
             .toList()
         if (missingIds.isEmpty()) return@LaunchedEffect
-        val loaded = withContext(Dispatchers.IO) {
+        val loaded = withContext(Dispatchers.Default) {
             missingIds.mapNotNull { userId ->
                 runCatching { userId to usersApi.fetchUser(userId).iconUrl }.getOrNull()
             }.toMap()

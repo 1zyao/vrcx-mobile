@@ -12,6 +12,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -50,19 +51,23 @@ internal fun VrcxConnectionEditor(
         mutableStateOf(initialConfig?.databaseType ?: RemoteDatabaseType.PostgreSQL)
     }
     var databaseTypeExpanded by remember { mutableStateOf(false) }
+    var accountDialogOpen by remember { mutableStateOf(false) }
+    var accountPrefixes by remember { mutableStateOf<List<String>>(emptyList()) }
+    var pendingConfig by remember { mutableStateOf<RemoteDatabaseConfig?>(null) }
+    var isDiscovering by remember { mutableStateOf(false) }
     var isTesting by remember { mutableStateOf(false) }
     var feedback by remember { mutableStateOf<String?>(null) }
     var feedbackIsError by remember { mutableStateOf(false) }
 
-    fun readConfig(): RemoteDatabaseConfig? {
+    fun readConfig(requireAccount: Boolean = true): RemoteDatabaseConfig? {
         val parsedPort = port.toIntOrNull()
         return when {
             host.isBlank() -> { feedback = "请输入数据库地址"; null }
             parsedPort !in 1..65535 -> { feedback = "端口必须是 1 到 65535"; null }
             database.isBlank() -> { feedback = "请输入数据库名称"; null }
             username.isBlank() -> { feedback = "请输入用户名"; null }
-            accountPrefix.isBlank() -> { feedback = "请输入 VRCX 账号前缀"; null }
-            !accountPrefix.matches(Regex("[A-Za-z_][A-Za-z0-9_]*")) -> {
+            requireAccount && accountPrefix.isBlank() -> { feedback = "请先发现并选择 VRCX 账号"; null }
+            accountPrefix.isNotBlank() && !accountPrefix.matches(Regex("[A-Za-z_][A-Za-z0-9_]*")) -> {
                 feedback = "账号前缀只能包含字母、数字和下划线，且不能以数字开头"
                 null
             }
@@ -76,6 +81,66 @@ internal fun VrcxConnectionEditor(
                 tls = tls,
                 databaseType = databaseType,
             )
+        }
+    }
+
+    suspend fun discoverAccounts(candidate: RemoteDatabaseConfig): List<String> {
+        val client = createVrcxDatabaseClient(candidate)
+        return if (candidate.databaseType == RemoteDatabaseType.PostgreSQL) {
+            client.query(
+                "SELECT nspname FROM pg_namespace WHERE nspname LIKE :pattern ESCAPE '\\' ORDER BY nspname",
+                mapOf("pattern" to "account\\_%"),
+            ).mapNotNull { row -> extractAccountPrefix(row.firstOrNull()?.toString(), "^account_([A-Za-z_][A-Za-z0-9_]*)$") }
+                .distinct().sorted()
+        } else {
+            client.query(
+                "SELECT table_name FROM information_schema.tables WHERE table_schema = :database AND table_name LIKE :pattern ESCAPE '\\' ORDER BY table_name",
+                mapOf("database" to candidate.database, "pattern" to "%\\_feed\\_%"),
+            ).mapNotNull { row -> extractAccountPrefix(row.firstOrNull()?.toString(), "^([A-Za-z_][A-Za-z0-9_]*)_feed_(gps|status|bio|avatar|online_offline)$") }
+                .distinct().sorted()
+        }
+    }
+
+    fun saveConfig(candidate: RemoteDatabaseConfig) {
+        runCatching { saveVrcxConnectionConfig(candidate) }
+            .onSuccess { onSaved() }
+            .onFailure {
+                feedback = it.message ?: "保存失败"
+                feedbackIsError = true
+            }
+    }
+
+    fun discoverAccounts() {
+        val candidate = readConfig(requireAccount = false) ?: return
+        scope.launch {
+            isDiscovering = true
+            feedback = null
+            feedbackIsError = false
+            try {
+                accountPrefixes = discoverAccounts(candidate)
+                when (accountPrefixes.size) {
+                    0 -> {
+                        feedback = "未发现可用的 VRCX 账号，请确认只读用户有元数据权限"
+                        feedbackIsError = true
+                    }
+                    1 -> {
+                        accountPrefix = accountPrefixes.single()
+                        feedback = "已发现账号：$accountPrefix"
+                    }
+                    else -> {
+                        accountPrefix = ""
+                        accountDialogOpen = true
+                        feedback = "发现多个账号，请选择一个"
+                    }
+                }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (throwable: Throwable) {
+                feedback = throwable.message ?: throwable::class.simpleName ?: "账号发现失败"
+                feedbackIsError = true
+            } finally {
+                isDiscovering = false
+            }
         }
     }
 
@@ -102,6 +167,8 @@ internal fun VrcxConnectionEditor(
                         text = { Text(databaseTypeLabel(type)) },
                         onClick = {
                             databaseType = type
+                            accountPrefix = ""
+                            accountPrefixes = emptyList()
                             databaseTypeExpanded = false
                         },
                     )
@@ -120,18 +187,28 @@ internal fun VrcxConnectionEditor(
             password, { password = it }, Modifier.fillMaxWidth(), label = { Text("密码") }, singleLine = true,
             visualTransformation = PasswordVisualTransformation(),
         )
-        OutlinedTextField(
-            accountPrefix, { accountPrefix = it }, Modifier.fillMaxWidth(),
-            label = { Text("VRCX 账号前缀") }, singleLine = true,
-            supportingText = {
-                Text(
-                    if (databaseType == RemoteDatabaseType.PostgreSQL) {
-                        "对应 PostgreSQL schema：account_<前缀>"
-                    } else {
-                        "对应 MySQL/MariaDB 表前缀：<前缀>_feed_*"
-                    },
-                )
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Box(Modifier.weight(1f)) {
+                OutlinedButton(
+                    enabled = !isDiscovering,
+                    onClick = { accountDialogOpen = true },
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text(accountPrefix.ifBlank { "选择 VRCX 账号" })
+                }
+            }
+            OutlinedButton(enabled = !isDiscovering, onClick = ::discoverAccounts) {
+                if (isDiscovering) CircularProgressIndicator() else Text("发现账号")
+            }
+        }
+        Text(
+            if (databaseType == RemoteDatabaseType.PostgreSQL) {
+                "连接后自动读取 account_<前缀> schema"
+            } else {
+                "连接后自动读取 <前缀>_feed_* 表"
             },
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             Switch(checked = tls, onCheckedChange = { tls = it })
@@ -155,7 +232,7 @@ internal fun VrcxConnectionEditor(
             OutlinedButton(
                 enabled = !isTesting,
                 onClick = {
-                    val candidate = readConfig() ?: return@OutlinedButton
+                val candidate = readConfig() ?: return@OutlinedButton
                     scope.launch {
                         isTesting = true
                         feedback = null
@@ -177,20 +254,79 @@ internal fun VrcxConnectionEditor(
             ) {
                 if (isTesting) CircularProgressIndicator() else Text("测试连接")
             }
-            Button(onClick = {
-                val candidate = readConfig() ?: return@Button
-                feedback = null
-                feedbackIsError = false
-                runCatching { saveVrcxConnectionConfig(candidate) }
-                    .onSuccess { onSaved() }
-                    .onFailure {
-                        feedback = it.message ?: "保存失败"
-                        feedbackIsError = true
+            Button(
+                enabled = !isDiscovering && !isTesting,
+                onClick = {
+                    val candidate = readConfig(requireAccount = false) ?: return@Button
+                    if (accountPrefix.isNotBlank() && accountPrefix in accountPrefixes) {
+                        runCatching { saveVrcxConnectionConfig(candidate.copy(accountPrefix = accountPrefix)) }
+                            .onSuccess { onSaved() }
+                            .onFailure {
+                                feedback = it.message ?: "保存失败"
+                                feedbackIsError = true
+                            }
+                        return@Button
                     }
-            }) { Text("保存配置") }
+                    scope.launch {
+                        isDiscovering = true
+                        feedback = null
+                        feedbackIsError = false
+                        try {
+                            accountPrefixes = discoverAccounts(candidate)
+                            if (accountPrefixes.isEmpty()) {
+                                feedback = "未发现可用的 VRCX 账号，请确认只读用户有元数据权限"
+                                feedbackIsError = true
+                            } else if (accountPrefixes.size == 1) {
+                                accountPrefix = accountPrefixes.single()
+                                saveConfig(candidate.copy(accountPrefix = accountPrefix))
+                            } else {
+                                accountPrefix = ""
+                                pendingConfig = candidate
+                                accountDialogOpen = true
+                                feedback = "发现多个账号，请选择一个"
+                            }
+                        } catch (cancelled: CancellationException) {
+                            throw cancelled
+                        } catch (throwable: Throwable) {
+                            feedback = throwable.message ?: throwable::class.simpleName ?: "保存失败"
+                            feedbackIsError = true
+                        } finally {
+                            isDiscovering = false
+                        }
+                    }
+                },
+            ) { Text("保存配置") }
         }
     }
+
+    if (accountDialogOpen) {
+        AlertDialog(
+            onDismissRequest = { accountDialogOpen = false },
+            title = { Text("选择 VRCX 账号") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    accountPrefixes.forEach { prefix ->
+                        OutlinedButton(
+                            onClick = {
+                                accountPrefix = prefix
+                                accountDialogOpen = false
+                                pendingConfig?.let { candidate ->
+                                    pendingConfig = null
+                                    saveConfig(candidate.copy(accountPrefix = prefix))
+                                }
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                        ) { Text(prefix) }
+                    }
+                }
+            },
+            confirmButton = {},
+        )
+    }
 }
+
+private fun extractAccountPrefix(value: String?, pattern: String): String? =
+    value?.let { Regex(pattern).matchEntire(it)?.groupValues?.getOrNull(1) }
 
 private fun databaseTypeLabel(type: RemoteDatabaseType): String = when (type) {
     RemoteDatabaseType.PostgreSQL -> "PostgreSQL"

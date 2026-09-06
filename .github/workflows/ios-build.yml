@@ -39,5 +39,61 @@ jobs:
           xcodebuild -version
           java -version
 
-      - name: Build iOS simulator framework
-        run: bash ./gradlew :composeApp:linkDebugFrameworkIosSimulatorArm64 --no-daemon
+      - name: Build iOS simulator app
+        run: |
+          xcodebuild \
+            -project iosApp/iosApp.xcodeproj \
+            -scheme iosApp \
+            -sdk iphonesimulator \
+            -destination 'generic/platform=iOS Simulator' \
+            -configuration Debug \
+            -derivedDataPath "$RUNNER_TEMP/DerivedData" \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO
+
+      - name: Package iOS simulator app
+        run: |
+          set -euo pipefail
+          app_path="$RUNNER_TEMP/DerivedData/Build/Products/Debug-iphonesimulator/VRCM.app"
+          test -d "$app_path"
+          mkdir -p "$RUNNER_TEMP/SimulatorPayload/Payload"
+          cp -R "$app_path" "$RUNNER_TEMP/SimulatorPayload/Payload/"
+          ditto -c -k --sequesterRsrc --keepParent \
+            "$RUNNER_TEMP/SimulatorPayload" \
+            "$RUNNER_TEMP/VRCM-iOS-Simulator.zip"
+
+      - name: Upload iOS simulator package
+        uses: actions/upload-artifact@v4
+        with:
+          name: VRCM-iOS-Simulator
+          path: ${{ runner.temp }}/VRCM-iOS-Simulator.zip
+          if-no-files-found: error
+
+      - name: Build iOS device archive
+        run: |
+          set -euo pipefail
+          xcodebuild \
+            -project iosApp/iosApp.xcodeproj \
+            -scheme iosApp \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            -configuration Debug \
+            -archivePath "$RUNNER_TEMP/VRCM.xcarchive" \
+            archive \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO
+
+      - name: Package iOS device IPA
+        run: |
+          set -euo pipefail
+          bash iosApp/package-ipa.sh \
+            "$RUNNER_TEMP/VRCM.xcarchive" \
+            "$RUNNER_TEMP/VRCM-iOS-device.ipa"
+          test -f "$RUNNER_TEMP/VRCM-iOS-device.ipa"
+
+      - name: Upload iOS device IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: VRCM-iOS-Device-IPA
+          path: ${{ runner.temp }}/VRCM-iOS-device.ipa
+          if-no-files-found: error

@@ -49,10 +49,21 @@ internal object FeedQuery {
             " AND (created_at < :cursorCreatedAt OR " +
                 "(created_at = :cursorCreatedAt AND id < :cursorId))"
         } ?: ""
-        val userSql = if (filter.userId == null) "" else " AND user_id = :userId"
+        val operator = if (dialect == FeedSqlDialect.PostgreSQL) "ILIKE" else "LIKE"
+        val userSql = if (filter.userId == null) "" else " AND user_id $operator :userId"
         val searchSql = if (filter.query.isBlank()) "" else {
-            val operator = if (dialect == FeedSqlDialect.PostgreSQL) "ILIKE" else "LIKE"
-            " AND (display_name $operator :query OR user_id $operator :query)"
+            val fields = when {
+                filter.query.trim().startsWith("wrld_", ignoreCase = true) ||
+                    filter.query.trim().startsWith("grp_", ignoreCase = true) ->
+                    listOf("location")
+                type == FeedType.GPS || type == FeedType.Online || type == FeedType.Offline ->
+                    listOf("display_name", "world_name", "group_name")
+                type == FeedType.Status -> listOf("display_name", "status", "status_description")
+                type == FeedType.Bio -> listOf("display_name", "bio")
+                type == FeedType.Avatar -> listOf("display_name", "avatar_name")
+                else -> listOf("display_name")
+            }
+            " AND (${fields.joinToString(" OR ") { "$it $operator :query" }})"
         }
         val worldSql = if (filter.worldName.isNullOrBlank()) "" else {
             val operator = if (dialect == FeedSqlDialect.PostgreSQL) "ILIKE" else "LIKE"

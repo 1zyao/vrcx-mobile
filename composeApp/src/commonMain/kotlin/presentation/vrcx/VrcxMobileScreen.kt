@@ -8,6 +8,8 @@ import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -25,6 +27,7 @@ import androidx.compose.material.icons.filled.Portrait
 import androidx.compose.material.icons.filled.Power
 import androidx.compose.material.icons.filled.PowerOff
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -39,6 +42,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -52,6 +56,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import coil3.ImageLoader
@@ -78,21 +83,16 @@ fun VrcxMobileScreen(previewEvents: List<VrcxFeedEvent>? = null) {
     var error by remember { mutableStateOf<String?>(null) }
     var filter by remember { mutableStateOf(FeedFilter()) }
     var showEditor by remember { mutableStateOf(false) }
-    var showFilters by remember { mutableStateOf(false) }
     var searchText by remember { mutableStateOf("") }
-    var userText by remember { mutableStateOf("") }
-    var worldText by remember { mutableStateOf("") }
-    var fromText by remember { mutableStateOf("") }
-    var toText by remember { mutableStateOf("") }
 
-    /** 预览模式直接渲染传入样本并按类型筛选；正常模式使用远端查询结果。 */
+    /** 预览模式使用与远程查询一致的包含式筛选；正常模式使用远端查询结果。 */
     val shownEvents = if (previewEvents != null) {
-        previewEvents.filter { it.type in filter.types }
+        previewEvents.filter { it.matchesFeedFilter(filter) }
     } else {
         events
     }
 
-    fun runLoad(reset: Boolean) {
+    fun runLoad(reset: Boolean, requestedFilter: FeedFilter = filter) {
         if (isLoading || isPreview) return
         scope.launch {
             isLoading = true
@@ -112,9 +112,9 @@ fun VrcxMobileScreen(previewEvents: List<VrcxFeedEvent>? = null) {
                 }
                 val cursor = if (reset) null
                 else events.lastOrNull()?.let { FeedCursor(it.createdAt, it.rowId) }
-                val page = repository?.load(filter.copy(cursor = cursor)) ?: emptyList()
+                val page = repository?.load(requestedFilter.copy(cursor = cursor)) ?: emptyList()
                 events = if (reset) page else events + page
-                hasMore = page.size >= filter.limit
+                hasMore = page.size >= requestedFilter.limit
             } catch (t: CancellationException) {
                 throw t
             } catch (t: Throwable) {
@@ -133,16 +133,10 @@ fun VrcxMobileScreen(previewEvents: List<VrcxFeedEvent>? = null) {
         }
     }
 
-    fun applyFilters() {
-        filter = filter.copy(
-            query = searchText.trim(),
-            userId = userText.trim().ifBlank { null },
-            worldName = worldText.trim().ifBlank { null },
-            fromCreatedAt = fromText.trim().ifBlank { null },
-            toCreatedAt = toText.trim().ifBlank { null },
-            cursor = null,
-        )
-        if (!isPreview) runLoad(reset = true)
+    fun submitSearch() {
+        val next = filter.copy(query = searchText.trim(), cursor = null)
+        filter = next
+        if (!isPreview) runLoad(reset = true, requestedFilter = next)
     }
 
     LaunchedEffect(Unit) { if (!isPreview) runLoad(reset = true) }
@@ -159,14 +153,26 @@ fun VrcxMobileScreen(previewEvents: List<VrcxFeedEvent>? = null) {
                 } else {
                     {}
                 },
-                title = { Text(if (showEditor) "连接设置" else "VRCX Mobile") },
+                title = {
+                    if (showEditor) {
+                        Text("连接设置")
+                    } else {
+                        OutlinedTextField(
+                            value = searchText,
+                            onValueChange = { searchText = it },
+                            modifier = Modifier.fillMaxWidth(),
+                            placeholder = { Text("搜索 Feed") },
+                            leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
+                            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                            keyboardActions = KeyboardActions(onSearch = { submitSearch() }),
+                            singleLine = true,
+                        )
+                    }
+                },
                 actions = {
                     if (!showEditor) {
                         IconButton(onClick = { showEditor = true }) {
                             Icon(Icons.Default.Settings, contentDescription = "连接设置")
-                        }
-                        IconButton(onClick = { showFilters = !showFilters }) {
-                            Icon(Icons.Default.Edit, contentDescription = "搜索和筛选")
                         }
                         IconButton(onClick = { runLoad(reset = true) }) {
                             Icon(Icons.Default.Refresh, contentDescription = "刷新")
@@ -205,29 +211,6 @@ fun VrcxMobileScreen(previewEvents: List<VrcxFeedEvent>? = null) {
                         label = { Text(typeLabel(type)) },
                     )
                 }
-            }
-            if (!showEditor && showFilters) {
-                FeedFilterPanel(
-                    searchText = searchText,
-                    onSearchTextChange = { searchText = it },
-                    userText = userText,
-                    onUserTextChange = { userText = it },
-                    worldText = worldText,
-                    onWorldTextChange = { worldText = it },
-                    fromText = fromText,
-                    onFromTextChange = { fromText = it },
-                    toText = toText,
-                    onToTextChange = { toText = it },
-                    onApply = ::applyFilters,
-                    onClear = {
-                        searchText = ""
-                        userText = ""
-                        worldText = ""
-                        fromText = ""
-                        toText = ""
-                        applyFilters()
-                    },
-                )
             }
             when {
                 shownEvents.isEmpty() && isLoading -> {
@@ -270,6 +253,33 @@ fun VrcxMobileScreen(previewEvents: List<VrcxFeedEvent>? = null) {
     }
 }
 
+private fun VrcxFeedEvent.matchesFeedFilter(filter: FeedFilter): Boolean {
+    if (type !in filter.types) return false
+    val user = filter.userId?.trim()?.takeIf { it.isNotEmpty() }
+    if (user != null && !userId.contains(user, ignoreCase = true)) return false
+    val world = filter.worldName?.trim()?.takeIf { it.isNotEmpty() }
+    if (world != null && !worldName.orEmpty().contains(world, ignoreCase = true)) return false
+    val from = filter.fromCreatedAt?.trim()?.takeIf { it.isNotEmpty() }
+    if (from != null && createdAt < from) return false
+    val to = filter.toCreatedAt?.trim()?.takeIf { it.isNotEmpty() }
+    if (to != null && createdAt >= to) return false
+
+    val query = filter.query.trim()
+    if (query.isEmpty()) return true
+    val values = if (query.startsWith("wrld_", ignoreCase = true) || query.startsWith("grp_", ignoreCase = true)) {
+        listOf(location)
+    } else {
+        when (type) {
+            FeedType.GPS, FeedType.Online, FeedType.Offline ->
+                listOf(displayName, worldName, groupName)
+            FeedType.Status -> listOf(displayName, status, statusDescription)
+            FeedType.Bio -> listOf(displayName, bio)
+            FeedType.Avatar -> listOf(displayName, avatarName)
+        }
+    }
+    return values.any { it?.contains(query, ignoreCase = true) == true }
+}
+
 @Composable
 private fun PreviewBanner() {
     Card(Modifier.fillMaxWidth()) {
@@ -279,73 +289,6 @@ private fun PreviewBanner() {
                 "以下为本地示例数据，仅用于预览卡片样式；接入数据库后本页面不包含任何示例内容。",
                 style = MaterialTheme.typography.bodyMedium,
             )
-        }
-    }
-}
-
-@Composable
-private fun FeedFilterPanel(
-    searchText: String,
-    onSearchTextChange: (String) -> Unit,
-    userText: String,
-    onUserTextChange: (String) -> Unit,
-    worldText: String,
-    onWorldTextChange: (String) -> Unit,
-    fromText: String,
-    onFromTextChange: (String) -> Unit,
-    toText: String,
-    onToTextChange: (String) -> Unit,
-    onApply: () -> Unit,
-    onClear: () -> Unit,
-) {
-    Card(Modifier.fillMaxWidth()) {
-        Column(
-            modifier = Modifier.padding(12.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            OutlinedTextField(
-                value = searchText,
-                onValueChange = onSearchTextChange,
-                modifier = Modifier.fillMaxWidth(),
-                label = { Text("搜索玩家名称或 User ID") },
-                singleLine = true,
-            )
-            OutlinedTextField(
-                value = userText,
-                onValueChange = onUserTextChange,
-                modifier = Modifier.fillMaxWidth(),
-                label = { Text("指定 User ID（可选）") },
-                singleLine = true,
-            )
-            OutlinedTextField(
-                value = worldText,
-                onValueChange = onWorldTextChange,
-                modifier = Modifier.fillMaxWidth(),
-                label = { Text("世界名称（可选）") },
-                singleLine = true,
-            )
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(
-                    value = fromText,
-                    onValueChange = onFromTextChange,
-                    modifier = Modifier.weight(1f),
-                    label = { Text("开始时间") },
-                    placeholder = { Text("2026-01-01T00:00:00Z") },
-                    singleLine = true,
-                )
-                OutlinedTextField(
-                    value = toText,
-                    onValueChange = onToTextChange,
-                    modifier = Modifier.weight(1f),
-                    label = { Text("结束时间") },
-                    placeholder = { Text("2026-02-01T00:00:00Z") },
-                    singleLine = true,
-                )
-            }
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Button(onClick = onApply) { Text("应用筛选") }
-                OutlinedButton(onClick = onClear) { Text("清除") }
-            }
         }
     }
 }

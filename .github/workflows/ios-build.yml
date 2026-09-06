@@ -23,6 +23,9 @@ jobs:
           distribution: temurin
           java-version: '17'
 
+      - name: Make Gradle wrapper executable
+        run: chmod +x ./gradlew
+
       - name: Cache Gradle and Kotlin/Native
         uses: actions/cache@v4
         with:

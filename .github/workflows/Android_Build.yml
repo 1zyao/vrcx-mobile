@@ -1,10 +1,7 @@
 name: Android Build CI
 
-# 触发条件：推送代码到 main 分支或从 main 分支发起 pull request 或者手动触发
+# 仅在需要时手动触发，避免消耗 GitHub Actions 配额
 on:
-  push:
-    branches:
-      - main
   workflow_dispatch:
 
 jobs:

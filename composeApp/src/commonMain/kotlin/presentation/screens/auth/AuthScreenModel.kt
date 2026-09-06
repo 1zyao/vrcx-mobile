@@ -10,9 +10,14 @@ import io.github.vrcmteam.vrcm.presentation.compoments.ToastText
 import io.github.vrcmteam.vrcm.presentation.extensions.onApiFailure
 import io.github.vrcmteam.vrcm.presentation.screens.auth.data.AuthCardPage
 import io.github.vrcmteam.vrcm.presentation.screens.auth.data.AuthUIState
+import io.github.vrcmteam.vrcm.presentation.vrcx.RemoteDatabaseType
+import io.github.vrcmteam.vrcm.presentation.vrcx.createVrcxDatabaseClient
+import io.github.vrcmteam.vrcm.presentation.vrcx.loadVrcxConnectionConfig
 import io.github.vrcmteam.vrcm.service.AuthService
 import io.github.vrcmteam.vrcm.service.data.AccountDto
 import kotlinx.coroutines.*
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
 import org.koin.core.logger.Logger
 
 
@@ -35,6 +40,34 @@ class AuthScreenModel(
     fun accountDtoList():List<AccountDto> = authService.accountDtoList()
 
     val uiState: AuthUIState by _uiState
+
+    suspend fun loadVrcxSavedCredentials() = withContext(Dispatchers.Default) {
+        withTimeoutOrNull(10_000L) {
+            runCatching {
+                val config = loadVrcxConnectionConfig() ?: return@runCatching
+                val client = createVrcxDatabaseClient(config)
+                val key = if (config.databaseType == RemoteDatabaseType.MySQL) "`key`" else "key"
+                val row = client.query(
+                    "SELECT value FROM configs WHERE $key = :key",
+                    mapOf("key" to "config:savedcredentials"),
+                ).firstOrNull() ?: return@runCatching
+                val credentials = Json.parseToJsonElement(row.firstOrNull()?.toString().orEmpty())
+                    as? JsonObject ?: return@runCatching
+                val loginParams = credentials.values
+                    .mapNotNull { (it as? JsonObject)?.get("loginParams") as? JsonObject }
+                    .firstOrNull { it["username"]?.toString()?.trim('"').orEmpty().isNotBlank() }
+                    ?: return@runCatching
+                val savedUsername = loginParams["username"]?.toString()?.trim('"').orEmpty()
+                val savedPassword = loginParams["password"]?.toString()?.trim('"').orEmpty()
+                if (savedUsername.isNotBlank() && savedPassword.isNotBlank()) {
+                    _uiState.value = _uiState.value.copy(
+                        username = savedUsername,
+                        password = savedPassword,
+                    )
+                }
+            }
+        }
+    }
 
     fun onUsernameChange(username: String) {
         _uiState.value = _uiState.value.copy(username = username)

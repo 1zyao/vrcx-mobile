@@ -32,6 +32,7 @@ import io.github.vrcmteam.vrcm.presentation.settings.locale.LanguageTag
 import io.github.vrcmteam.vrcm.presentation.settings.locale.strings
 import io.github.vrcmteam.vrcm.presentation.settings.theme.ThemeColor
 import io.github.vrcmteam.vrcm.presentation.supports.WebIcons
+import io.github.vrcmteam.vrcm.presentation.vrcx.VrcxConnectionScreen
 import io.github.vrcmteam.vrcm.service.AuthService
 import io.github.vrcmteam.vrcm.service.VersionService
 import io.github.vrcmteam.vrcm.storage.AccountCacheManager
@@ -51,6 +52,7 @@ fun SettingsBottomSheet(
     isVisible: Boolean,
     onDismissRequest: () -> Unit,
 ) {
+    val navigator = LocalNavigator.currentOrThrow
 
     ABottomSheet(
         isVisible = isVisible,
@@ -59,27 +61,33 @@ fun SettingsBottomSheet(
     ) {
 
         Column(
-            modifier = Modifier.fillMaxWidth()
-                .verticalScroll(rememberScrollState())
-                .align(Alignment.CenterHorizontally)
-                .padding(horizontal = 12.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            SettingsBlockSurface {
-                CustomBlock()
-            }
-            SettingsBlockSurface {
-                AboutBlock(onDismissRequest)
-            }
-            LogoutButton(onDismissRequest)
+                modifier = Modifier.fillMaxWidth()
+                    .verticalScroll(rememberScrollState())
+                    .align(Alignment.CenterHorizontally)
+                    .padding(horizontal = 12.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                SettingsBlockSurface {
+                    CustomBlock()
+                }
+                SettingsBlockSurface {
+                    AboutBlock(
+                         onDismissRequest = onDismissRequest,
+                         onOpenVrcxConnection = {
+                             navigator.push(VrcxConnectionScreen)
+                             onDismissRequest()
+                         },
+                    )
+                }
+                LogoutButton(onDismissRequest)
         }
     }
 }
 
 
 @Composable
-private inline fun ColumnScope.CustomBlock() {
+private fun ColumnScope.CustomBlock() {
     var currentSettings by LocalSettingsState.current
     val isDarkTheme = LocalResolvedDarkTheme.current
     Column(
@@ -149,7 +157,10 @@ private inline fun ColumnScope.CustomBlock() {
 }
 
 @Composable
-private fun AboutBlock(onDismissRequest: () -> Unit) {
+private fun AboutBlock(
+    onDismissRequest: () -> Unit,
+    onOpenVrcxConnection: () -> Unit,
+) {
     val versionService = koinInject<VersionService>()
     val imageLoader = koinInject<ImageLoader>()
     val accountCacheManager = koinInject<AccountCacheManager>()
@@ -204,6 +215,22 @@ private fun AboutBlock(onDismissRequest: () -> Unit) {
                 } else {
                     strings.stettingClipboardReading
                 },
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        HorizontalDivider(modifier = Modifier.padding(horizontal = 12.dp), thickness = 0.5.dp)
+        Row(
+            modifier = Modifier.fillMaxWidth()
+                .clickable(onClick = onOpenVrcxConnection)
+                .padding(12.dp),
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(strings.vrcxConnectionTitle)
+            Spacer(modifier = Modifier.weight(1f))
+            Text(
+                strings.vrcxConnectionSettings,
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )

@@ -48,6 +48,7 @@ import io.github.vrcmteam.vrcm.presentation.screens.notification.NotificationScr
 import io.github.vrcmteam.vrcm.presentation.screens.home.pager.FriendListPager
 import io.github.vrcmteam.vrcm.presentation.screens.home.pager.FriendLocationPager
 import io.github.vrcmteam.vrcm.presentation.screens.home.pager.SearchListPager
+import io.github.vrcmteam.vrcm.presentation.screens.home.pager.VrcxPager
 import io.github.vrcmteam.vrcm.presentation.screens.home.sheet.SettingsBottomSheet
 import io.github.vrcmteam.vrcm.presentation.screens.user.UserProfileScreen
 import io.github.vrcmteam.vrcm.presentation.screens.user.data.UserProfileVo
@@ -66,6 +67,7 @@ object HomeScreen : AppListRoute {
         FriendLocationPager,
         FriendListPager,
         SearchListPager,
+        VrcxPager,
     )
 
     @ExperimentalSharedTransitionApi
@@ -211,7 +213,10 @@ private inline fun AppListRoute.HomeTopAppBar(
                     modifier = Modifier
                         .simpleCombinedClickable(
                             onLongClick = { currentUser?.let { onLongClickUserIcon() } },
-                            onClick = { currentUser?.let { onClickUserIcon(it) } },
+                             onClick = {
+                                 currentUser?.let { onClickUserIcon(it) }
+                                     ?: (currentNavigator replace AuthAnimeScreen(false))
+                             },
                         )
                         .testTag("home-user-avatar")
                         .sharedBoundsBy(
@@ -242,14 +247,22 @@ private inline fun AppListRoute.HomeTopAppBar(
                         .simpleClickable { currentUser?.let { onClickShowStatusDialog(currentUser) } },
                     horizontalAlignment = Alignment.Start,
                 ) {
-                    UserInfoRow(
-                        iconSize = 16.dp,
-                        style = MaterialTheme.typography.titleMedium,
-                        user = currentUser,
-                        sharedUserId = homeUserId,
-                        sharedSuffixKey = sharedSuffixKey,
-                        pronouns = currentUser?.pronouns
-                    )
+                    if (currentUser == null) {
+                        Text(
+                            text = "点击登录",
+                            style = MaterialTheme.typography.titleMedium,
+                            color = MaterialTheme.colorScheme.primary,
+                        )
+                    } else {
+                        UserInfoRow(
+                            iconSize = 16.dp,
+                            style = MaterialTheme.typography.titleMedium,
+                            user = currentUser,
+                            sharedUserId = homeUserId,
+                            sharedSuffixKey = sharedSuffixKey,
+                            pronouns = currentUser.pronouns,
+                        )
+                    }
                     AnimatedVisibility(statusVisibility){
                         UserStatusRow(
                             iconSize = 8.dp,

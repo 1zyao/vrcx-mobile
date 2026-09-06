@@ -21,6 +21,9 @@ import io.github.vrcmteam.vrcm.presentation.screens.user.MutualFriendsScreen
 import io.github.vrcmteam.vrcm.presentation.screens.user.UserProfileScreen
 import io.github.vrcmteam.vrcm.presentation.screens.world.RecentWorldsScreen
 import io.github.vrcmteam.vrcm.presentation.screens.world.WorldProfileScreen
+import io.github.vrcmteam.vrcm.presentation.screens.vrcx.VrcxBrowseScreen
+import io.github.vrcmteam.vrcm.presentation.screens.vrcx.VrcxEntryScreen
+import io.github.vrcmteam.vrcm.presentation.vrcx.VrcxConnectionScreen
 import kotlinx.serialization.modules.SerializersModule
 import kotlinx.serialization.modules.polymorphic
 import kotlinx.serialization.modules.subclass
@@ -32,6 +35,9 @@ internal val appSavedStateConfiguration = SavedStateConfiguration {
             subclass(AuthScreen::class, AuthScreen.serializer())
             subclass(AuthAnimeScreen::class, AuthAnimeScreen.serializer())
             subclass(HomeScreen::class, HomeScreen.serializer())
+            subclass(VrcxEntryScreen::class, VrcxEntryScreen.serializer())
+            subclass(VrcxConnectionScreen::class, VrcxConnectionScreen.serializer())
+            subclass(VrcxBrowseScreen::class, VrcxBrowseScreen.serializer())
             subclass(GalleryScreen::class, GalleryScreen.serializer())
             subclass(GalleryPickerScreen::class, GalleryPickerScreen.serializer())
             subclass(PrintImageEditorScreen::class, PrintImageEditorScreen.serializer())

@@ -1,27 +1,162 @@
 package io.github.vrcmteam.vrcm
 
+import androidx.compose.animation.AnimatedContentTransitionScope
+import androidx.compose.animation.ContentTransform
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
+import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
-import io.github.vrcmteam.vrcm.presentation.vrcx.VrcxFeedEvent
-import io.github.vrcmteam.vrcm.presentation.vrcx.VrcxMobileScreen
+import androidx.compose.ui.unit.DpSize
+import androidx.compose.ui.unit.dp
+import androidx.navigation3.scene.Scene
+import io.github.vrcmteam.vrcm.core.shared.SharedFlowCentre
+import io.github.vrcmteam.vrcm.presentation.animations.AuthAnimeToHomeTransition
+import io.github.vrcmteam.vrcm.presentation.animations.HomeToAuthAnimeTransition
+import io.github.vrcmteam.vrcm.presentation.animations.fadeScreenTransition
+import io.github.vrcmteam.vrcm.presentation.animations.slideScreenTransition
+import io.github.vrcmteam.vrcm.presentation.animations.SlideOrientation
+import io.github.vrcmteam.vrcm.presentation.compoments.NotificationLaunchHandler
+import io.github.vrcmteam.vrcm.presentation.compoments.OfficialLinkPrompt
+import io.github.vrcmteam.vrcm.presentation.compoments.SharedTransitionDialog
+import io.github.vrcmteam.vrcm.presentation.compoments.SharedTransitionScreen
+import io.github.vrcmteam.vrcm.presentation.compoments.SnackBarToastBox
+import io.github.vrcmteam.vrcm.presentation.extensions.isTransitioning
+import io.github.vrcmteam.vrcm.presentation.extensions.isTransitioningFromTo
+import io.github.vrcmteam.vrcm.presentation.extensions.isTransitioningOn
+import io.github.vrcmteam.vrcm.presentation.navigation.AppRoute
+import io.github.vrcmteam.vrcm.presentation.navigation.BackNavigationPolicy
+import io.github.vrcmteam.vrcm.presentation.navigation.LocalBackNavigationPolicy
+import io.github.vrcmteam.vrcm.presentation.navigation.LocalNavigator
+import io.github.vrcmteam.vrcm.presentation.navigation.rememberAppNavigator
+import io.github.vrcmteam.vrcm.presentation.adaptive.LocalAppContentSize
+import io.github.vrcmteam.vrcm.presentation.adaptive.LocalAppWindowWidthClass
+import io.github.vrcmteam.vrcm.presentation.adaptive.appWindowWidthClass
+import io.github.vrcmteam.vrcm.presentation.screens.auth.AuthAnimeScreen
+import io.github.vrcmteam.vrcm.presentation.screens.auth.StartupAnimeScreen
+import io.github.vrcmteam.vrcm.presentation.screens.auth.VersionDialog
+import io.github.vrcmteam.vrcm.presentation.screens.avatar.AvatarProfileScreen
+import io.github.vrcmteam.vrcm.presentation.screens.gallery.GalleryScreen
+import io.github.vrcmteam.vrcm.presentation.screens.group.GroupProfileScreen
+import io.github.vrcmteam.vrcm.presentation.screens.home.HomeScreen
+import io.github.vrcmteam.vrcm.presentation.screens.meetup.MeetupCardDisplayRoute
+import io.github.vrcmteam.vrcm.presentation.screens.meetup.MeetupCardEditorRoute
+import io.github.vrcmteam.vrcm.presentation.screens.user.CardListDetailScreen
+import io.github.vrcmteam.vrcm.presentation.screens.user.MutualFriendsScreen
+import io.github.vrcmteam.vrcm.presentation.screens.user.UserProfileScreen
+import io.github.vrcmteam.vrcm.presentation.screens.world.WorldProfileScreen
+import io.github.vrcmteam.vrcm.service.FriendActivityService
+import io.github.vrcmteam.vrcm.service.NotificationLaunchInbox
+import io.github.vrcmteam.vrcm.service.OfficialLinkInbox
+import org.koin.compose.KoinContext
+import org.koin.compose.koinInject
+import io.github.vrcmteam.vrcm.network.websocket.WebSocketApi
+import io.github.vrcmteam.vrcm.presentation.screens.home.pager.FriendLocationPagerModel
+import io.github.vrcmteam.vrcm.presentation.settings.LocalSettingsState
+import io.github.vrcmteam.vrcm.presentation.settings.SettingsProvider
 
-/** VRCX Mobile 的只读入口，不初始化 VRChat 登录、WebSocket 或后台采集。 */
+@OptIn(ExperimentalComposeUiApi::class)
 @Composable
 fun App(
     windowChrome: @Composable () -> Unit = {},
-    officialLinkInbox: Any? = null,
-    notificationLaunchInbox: Any? = null,
-    previewEvents: List<VrcxFeedEvent>? = null,
+    officialLinkInbox: OfficialLinkInbox? = null,
+    notificationLaunchInbox: NotificationLaunchInbox? = null,
+    previewEvents: List<io.github.vrcmteam.vrcm.presentation.vrcx.VrcxFeedEvent>? = null,
 ) {
-    MaterialTheme {
-        Surface(Modifier.fillMaxSize()) {
-            windowChrome()
-            VrcxMobileScreen(previewEvents = previewEvents)
+    if (previewEvents != null) {
+        androidx.compose.material3.MaterialTheme {
+            androidx.compose.material3.Surface(Modifier.fillMaxSize()) {
+                windowChrome()
+                io.github.vrcmteam.vrcm.presentation.vrcx.VrcxMobileScreen(previewEvents)
+            }
+        }
+        return
+    }
+    val backNavigationPolicy = remember { BackNavigationPolicy() }
+    val navigator = rememberAppNavigator(HomeScreen)
+    val activeOfficialLinkInbox = remember(officialLinkInbox) { officialLinkInbox ?: OfficialLinkInbox() }
+    val activeNotificationLaunchInbox = remember(notificationLaunchInbox) { notificationLaunchInbox ?: NotificationLaunchInbox() }
+    KoinContext {
+        val webSocketApi = koinInject<WebSocketApi>()
+        val friendLocationPagerModel = koinInject<FriendLocationPagerModel>()
+        val friendActivityService = koinInject<FriendActivityService>()
+        val platform = koinInject<AppPlatform>()
+        SettingsProvider {
+            val backgroundMonitoringEnabled = rememberUpdatedState(LocalSettingsState.current.value.backgroundFriendMonitoringEnabled)
+            LaunchedEffect(friendActivityService) { friendActivityService.onAppResumed() }
+            LifecycleEventEffect(Lifecycle.Event.ON_STOP) {
+                friendLocationPagerModel.onBackground()
+                webSocketApi.onBackground(backgroundMonitoringEnabled.value)
+                friendActivityService.onAppStopped()
+            }
+            LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
+                friendActivityService.onAppResumed()
+                webSocketApi.onForeground()
+                friendLocationPagerModel.onForeground()
+                if (backgroundMonitoringEnabled.value && SharedFlowCentre.currentSession.value != null) {
+                    platform.resetBackgroundFriendMonitoringTimer()
+                }
+            }
+            Column(Modifier.fillMaxSize()) {
+                windowChrome()
+                BoxWithConstraints(Modifier.weight(1f).fillMaxWidth()) {
+                    val windowWidthClass = appWindowWidthClass(maxWidth)
+                    CompositionLocalProvider(
+                        LocalBackNavigationPolicy provides backNavigationPolicy,
+                        LocalNavigator provides navigator,
+                        LocalAppWindowWidthClass provides windowWidthClass,
+                        LocalAppContentSize provides DpSize(maxWidth, maxHeight),
+                    ) {
+                        SnackBarToastBox(Modifier.systemBarsPadding().padding(vertical = 76.dp, horizontal = 12.dp)) {
+                            VersionDialog()
+                            OfficialLinkPrompt(navigator, activeOfficialLinkInbox) {
+                                NotificationLaunchHandler(navigator, activeNotificationLaunchInbox)
+                                SharedTransitionScreen(
+                                    navigator = navigator,
+                                    transitionSpec = { selectTransition(isPop = false) },
+                                    popTransitionSpec = { selectTransition(isPop = true) },
+                                ) { screen ->
+                                    SharedTransitionDialog(key = screen.key) { screen.Content() }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
-    @Suppress("UNUSED_VARIABLE")
-    val ignored = officialLinkInbox to notificationLaunchInbox
+}
+
+fun AnimatedContentTransitionScope<Scene<AppRoute>>.selectTransition(isPop: Boolean): ContentTransform = when {
+    isTransitioningOn<HomeScreen, UserProfileScreen>() -> slideScreenTransition(isPop)
+    isTransitioningOn<HomeScreen, WorldProfileScreen>() -> slideScreenTransition(isPop)
+    isTransitioningOn<HomeScreen, GroupProfileScreen>() -> slideScreenTransition(isPop)
+    isTransitioningOn<HomeScreen, AvatarProfileScreen>() -> slideScreenTransition(isPop)
+    isTransitioningOn<HomeScreen, MeetupCardDisplayRoute>() -> fadeScreenTransition()
+    isTransitioningOn<HomeScreen, MeetupCardEditorRoute>() -> fadeScreenTransition()
+    isTransitioningOn<MeetupCardDisplayRoute, MeetupCardEditorRoute>() -> fadeScreenTransition()
+    isTransitioningOn<MutualFriendsScreen, UserProfileScreen>() -> slideScreenTransition(isPop)
+    isTransitioningOn<CardListDetailScreen, WorldProfileScreen>() -> slideScreenTransition(isPop)
+    isTransitioningOn<CardListDetailScreen, AvatarProfileScreen>() -> slideScreenTransition(isPop)
+    isTransitioningOn<UserProfileScreen, GroupProfileScreen>() -> slideScreenTransition(isPop)
+    isTransitioningOn<UserProfileScreen, WorldProfileScreen>() -> slideScreenTransition(isPop)
+    isTransitioningOn<UserProfileScreen, UserProfileScreen>() -> slideScreenTransition(isPop)
+    isTransitioningOn<UserProfileScreen, GalleryScreen>() -> slideScreenTransition(isPop, SlideOrientation.Horizontal)
+    isTransitioningFromTo<HomeScreen, AuthAnimeScreen>() -> HomeToAuthAnimeTransition
+    isTransitioningFromTo<AuthAnimeScreen, HomeScreen>() -> AuthAnimeToHomeTransition
+    isTransitioning<StartupAnimeScreen>() -> ContentTransform(EnterTransition.None, ExitTransition.None)
+    isTransitioning<AuthAnimeScreen>() -> ContentTransform(EnterTransition.None, ExitTransition.None)
+    else -> slideScreenTransition(isPop, SlideOrientation.Horizontal)
 }

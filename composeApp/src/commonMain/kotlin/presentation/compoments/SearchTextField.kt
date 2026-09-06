@@ -15,6 +15,7 @@ fun SearchTextField(
     modifier: Modifier = Modifier,
     value: String,
     placeholder: String = strings.fiendListPagerSearch,
+    onSearch: (() -> Unit)? = null,
     onValueChange: (String) -> Unit
 ) {
     val focusManager = LocalFocusManager.current
@@ -24,7 +25,10 @@ fun SearchTextField(
         hintText = placeholder,
         textValue = value,
         keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-        keyboardActions = KeyboardActions(onSearch = { focusManager.clearFocus() }),
+        keyboardActions = KeyboardActions(onSearch = {
+            focusManager.clearFocus()
+            onSearch?.invoke()
+        }),
         onValueChange = onValueChange
     )
 }

@@ -11,6 +11,7 @@ import io.github.vrcmteam.vrcm.storage.FavoriteLocalDao
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.toCollection
 
 internal class FavoriteGroupCache {
@@ -59,8 +60,13 @@ class FavoriteService(
 
 
     init {
-        CoroutineScope(Job()).launch(Dispatchers.IO) {
-            loadFavoriteLimits()
+        CoroutineScope(SupervisorJob() + Dispatchers.Default).launch {
+            SharedFlowCentre.currentSession.collectLatest { session ->
+                if (session == null) return@collectLatest
+                runCatching {
+                    withContext(Dispatchers.IO) { loadFavoriteLimits() }
+                }
+            }
         }
     }
 

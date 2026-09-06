@@ -1,6 +1,7 @@
 package io.github.vrcmteam.vrcm.presentation.compoments
 
 import androidx.compose.animation.core.*
+import androidx.compose.foundation.Image
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -107,8 +108,8 @@ fun AImage(
     val platformContext = koinInject<PlatformContext>()
     val isLoading = remember(imageData) { mutableStateOf(true) }
     val imageRequest: Any? =
-        when (imageData) {
-            is String -> remember(imageData, loadOriginalSize, cachedPlaceholderKey) {
+        when {
+            imageData is String && imageData.isNotBlank() -> remember(imageData, loadOriginalSize, cachedPlaceholderKey) {
                 createAImageRequest(
                     platformContext = platformContext,
                     imageUrl = imageData,
@@ -116,28 +117,39 @@ fun AImage(
                     cachedPlaceholderKey = cachedPlaceholderKey,
                 )
             }
-            is ImageRequest -> imageData
-            else -> imageData
+            imageData is ImageRequest -> imageData
+            else -> null
         }
 
     // 选择合适的闪烁动画颜色
     val background = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.8f)
     val shimmer =  MaterialTheme.colorScheme.surface.copy(alpha = 0.5f)
-    
-    AsyncImage(
-        modifier = modifier.shimmerEffect(
-            isLoading = isLoading.value,
-            backgroundColor = background,
-            shimmerColor = shimmer
-        ),
-        model = imageRequest,
-        contentDescription = contentDescription,
-        imageLoader = imageLoader,
-        placeholder = if (isLoading.value || imageRequest != null) null else placeholder,
-        error = error,
-        contentScale = contentScale,
-        onLoading = { isLoading.value = true },
-        onSuccess = { isLoading.value = false },
-        onError = { isLoading.value = false }
-    )
+
+    if (imageRequest == null) {
+        placeholder?.let {
+            Image(
+                modifier = modifier,
+                painter = it,
+                contentDescription = contentDescription,
+                contentScale = contentScale,
+            )
+        }
+    } else {
+        AsyncImage(
+            modifier = modifier.shimmerEffect(
+                isLoading = isLoading.value,
+                backgroundColor = background,
+                shimmerColor = shimmer
+            ),
+            model = imageRequest,
+            contentDescription = contentDescription,
+            imageLoader = imageLoader,
+            placeholder = null,
+            error = error,
+            contentScale = contentScale,
+            onLoading = { isLoading.value = true },
+            onSuccess = { isLoading.value = false },
+            onError = { isLoading.value = false }
+        )
+    }
 }

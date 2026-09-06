@@ -60,9 +60,11 @@ class HomeScreenModel(
     }
 
     init {
-        friendService.preloadFriendList()
-        friendLocationPagerModel.preloadFriendLocations()
-        refreshCurrentUser()
+        if (SharedFlowCentre.currentSession.value != null) {
+            friendService.preloadFriendList()
+            friendLocationPagerModel.preloadFriendLocations()
+            refreshCurrentUser()
+        }
         viewModelScope.launch {
             authService.currentUserState.collect { _currentUser.value = it }
         }

@@ -24,6 +24,7 @@ import io.github.vrcmteam.vrcm.presentation.screens.auth.card.LoginCardInput
 import io.github.vrcmteam.vrcm.presentation.screens.auth.card.VerifyCardInput
 import io.github.vrcmteam.vrcm.presentation.screens.auth.data.AuthCardPage
 import io.github.vrcmteam.vrcm.presentation.screens.auth.data.AuthUIState
+import io.github.vrcmteam.vrcm.presentation.screens.home.HomeScreen
 import io.github.vrcmteam.vrcm.presentation.settings.locale.strings
 import io.github.vrcmteam.vrcm.presentation.supports.AppIcons
 import io.github.vrcmteam.vrcm.service.data.AccountDto
@@ -38,6 +39,7 @@ object AuthScreen : AppRoute {
         val authScreenModel: AuthScreenModel = koinViewModel()
         var showAccountMenu by remember { mutableStateOf(false) }
         LaunchedEffect(Unit) {
+            authScreenModel.loadVrcxSavedCredentials()
             authScreenModel.tryAuth()
         }
         val authUIState = authScreenModel.uiState
@@ -69,7 +71,9 @@ object AuthScreen : AppRoute {
                         }
 
                         AuthCardPage.Login -> {
-                            NavCard(strings.authLoginTitle) {
+                            NavCard(strings.authLoginTitle, barContent = {
+                                ReturnIcon { currentNavigator replace HomeScreen }
+                            }) {
                                 LoginCardInput(
                                     uiState = authUIState,
                                     onUsernameChange = authScreenModel::onUsernameChange,

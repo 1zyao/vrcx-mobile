@@ -32,7 +32,14 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import kotlin.coroutines.cancellation.CancellationException
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
+import io.github.vrcmteam.vrcm.presentation.settings.locale.strings
+
+private const val DATABASE_OPERATION_TIMEOUT_MILLIS = 20_000L
 
 @Composable
 internal fun VrcxConnectionEditor(
@@ -58,17 +65,18 @@ internal fun VrcxConnectionEditor(
     var isTesting by remember { mutableStateOf(false) }
     var feedback by remember { mutableStateOf<String?>(null) }
     var feedbackIsError by remember { mutableStateOf(false) }
+    val locale = strings
 
     fun readConfig(requireAccount: Boolean = true): RemoteDatabaseConfig? {
         val parsedPort = port.toIntOrNull()
         return when {
-            host.isBlank() -> { feedback = "请输入数据库地址"; null }
-            parsedPort !in 1..65535 -> { feedback = "端口必须是 1 到 65535"; null }
-            database.isBlank() -> { feedback = "请输入数据库名称"; null }
-            username.isBlank() -> { feedback = "请输入用户名"; null }
-            requireAccount && accountPrefix.isBlank() -> { feedback = "请先发现并选择 VRCX 账号"; null }
+            host.isBlank() -> { feedback = locale.vrcxMissingHost; null }
+            parsedPort !in 1..65535 -> { feedback = locale.vrcxInvalidPort; null }
+            database.isBlank() -> { feedback = locale.vrcxMissingDatabase; null }
+            username.isBlank() -> { feedback = locale.vrcxMissingUsername; null }
+            requireAccount && accountPrefix.isBlank() -> { feedback = locale.vrcxMissingAccount; null }
             accountPrefix.isNotBlank() && !accountPrefix.matches(Regex("[A-Za-z_][A-Za-z0-9_]*")) -> {
-                feedback = "账号前缀只能包含字母、数字和下划线，且不能以数字开头"
+                feedback = locale.vrcxInvalidPrefix
                 null
             }
             else -> RemoteDatabaseConfig(
@@ -85,19 +93,21 @@ internal fun VrcxConnectionEditor(
     }
 
     suspend fun discoverAccounts(candidate: RemoteDatabaseConfig): List<String> {
-        val client = createVrcxDatabaseClient(candidate)
-        return if (candidate.databaseType == RemoteDatabaseType.PostgreSQL) {
-            client.query(
-                "SELECT nspname FROM pg_namespace WHERE nspname LIKE :pattern ESCAPE '\\' ORDER BY nspname",
-                mapOf("pattern" to "account\\_%"),
-            ).mapNotNull { row -> extractAccountPrefix(row.firstOrNull()?.toString(), "^account_([A-Za-z_][A-Za-z0-9_]*)$") }
-                .distinct().sorted()
-        } else {
-            client.query(
-                "SELECT table_name FROM information_schema.tables WHERE table_schema = :database ORDER BY table_name",
-                mapOf("database" to candidate.database),
-            ).mapNotNull { row -> extractAccountPrefix(row.firstOrNull()?.toString(), "^([A-Za-z_][A-Za-z0-9_]*)_feed_(gps|status|bio|avatar|online_offline)$") }
-                .distinct().sorted()
+        return withContext(Dispatchers.Default) {
+            val client = createVrcxDatabaseClient(candidate)
+            if (candidate.databaseType == RemoteDatabaseType.PostgreSQL) {
+                client.query(
+                    "SELECT nspname FROM pg_namespace WHERE nspname LIKE :pattern ESCAPE '\\' ORDER BY nspname",
+                    mapOf("pattern" to "account\\_%"),
+                ).mapNotNull { row -> extractAccountPrefix(row.firstOrNull()?.toString(), "^account_([A-Za-z_][A-Za-z0-9_]*)$") }
+                    .distinct().sorted()
+            } else {
+                client.query(
+                    "SELECT table_name FROM information_schema.tables WHERE table_schema = :database ORDER BY table_name",
+                    mapOf("database" to candidate.database),
+                ).mapNotNull { row -> extractAccountPrefix(row.firstOrNull()?.toString(), "^([A-Za-z_][A-Za-z0-9_]*)_feed_(gps|status|bio|avatar|online_offline)$") }
+                    .distinct().sorted()
+            }
         }
     }
 
@@ -105,7 +115,7 @@ internal fun VrcxConnectionEditor(
         runCatching { saveVrcxConnectionConfig(candidate) }
             .onSuccess { onSaved() }
             .onFailure {
-                feedback = it.message ?: "保存失败"
+                feedback = it.message ?: locale.vrcxSaveFailed
                 feedbackIsError = true
             }
     }
@@ -114,15 +124,15 @@ internal fun VrcxConnectionEditor(
         modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Text("远程数据库连接", style = MaterialTheme.typography.headlineSmall)
+        Text(locale.vrcxConnectionTitle, style = MaterialTheme.typography.headlineSmall)
         Text(
-            "填写 VRCX-K 使用的远程数据库。建议使用只读账号；密码会由当前平台的安全存储保护。",
+            locale.vrcxConnectionDescription,
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         Box {
             OutlinedButton(onClick = { databaseTypeExpanded = true }) {
-                Text("数据库类型：${databaseTypeLabel(databaseType)}")
+                Text(locale.vrcxDatabaseType.replace("%s", databaseTypeLabel(databaseType)))
             }
             DropdownMenu(
                 expanded = databaseTypeExpanded,
@@ -141,34 +151,34 @@ internal fun VrcxConnectionEditor(
                 }
             }
         }
-        OutlinedTextField(host, { host = it }, Modifier.fillMaxWidth(), label = { Text("主机地址") }, singleLine = true)
+        OutlinedTextField(host, { host = it }, Modifier.fillMaxWidth(), label = { Text(locale.vrcxHost) }, singleLine = true)
         OutlinedTextField(
             port, { port = it.filter(Char::isDigit) }, Modifier.fillMaxWidth(),
-            label = { Text("端口") }, singleLine = true,
+            label = { Text(locale.vrcxPort) }, singleLine = true,
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
         )
-        OutlinedTextField(database, { database = it }, Modifier.fillMaxWidth(), label = { Text("数据库名称") }, singleLine = true)
-        OutlinedTextField(username, { username = it }, Modifier.fillMaxWidth(), label = { Text("用户名") }, singleLine = true)
+        OutlinedTextField(database, { database = it }, Modifier.fillMaxWidth(), label = { Text(locale.vrcxDatabase) }, singleLine = true)
+        OutlinedTextField(username, { username = it }, Modifier.fillMaxWidth(), label = { Text(locale.authLoginUsername) }, singleLine = true)
         OutlinedTextField(
-            password, { password = it }, Modifier.fillMaxWidth(), label = { Text("密码") }, singleLine = true,
+            password, { password = it }, Modifier.fillMaxWidth(), label = { Text(locale.authLoginPassword) }, singleLine = true,
             visualTransformation = PasswordVisualTransformation(),
         )
         Text(
             if (databaseType == RemoteDatabaseType.PostgreSQL) {
-                "点击保存配置时自动读取 account_<前缀> schema"
+                locale.vrcxDiscoverSchema.replace("%s", "<prefix>")
             } else {
-                "点击保存配置时自动读取 <前缀>_feed_* 表"
+                locale.vrcxDiscoverTables.replace("%s", "<prefix>")
             },
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             Switch(checked = tls, onCheckedChange = { tls = it })
-            Text("使用 TLS（推荐）")
+            Text(locale.vrcxTls)
         }
         if (databaseType == RemoteDatabaseType.MySQL) {
             Text(
-                "MySQL/MariaDB 使用只读连接，表名格式为 <前缀>_feed_*。",
+                locale.vrcxMysqlDescription.replace("%s", "<prefix>"),
                 color = MaterialTheme.colorScheme.tertiary,
                 style = MaterialTheme.typography.bodyMedium,
             )
@@ -190,13 +200,20 @@ internal fun VrcxConnectionEditor(
                         feedback = null
                         feedbackIsError = false
                         try {
-                            FeedRepository(createVrcxDatabaseClient(candidate), candidate)
-                                .load(FeedFilter(limit = 1))
-                            feedback = "连接成功，Feed 只读查询可用"
+                            withTimeout(DATABASE_OPERATION_TIMEOUT_MILLIS) {
+                                withContext(Dispatchers.Default) {
+                                    FeedRepository(createVrcxDatabaseClient(candidate), candidate)
+                                        .load(FeedFilter(limit = 1))
+                                }
+                            }
+                            feedback = locale.vrcxConnectionSucceeded
+                        } catch (_: TimeoutCancellationException) {
+                            feedback = locale.vrcxTimeout
+                            feedbackIsError = true
                         } catch (cancelled: CancellationException) {
                             throw cancelled
                         } catch (throwable: Throwable) {
-                            feedback = throwable.message ?: throwable::class.simpleName ?: "连接失败"
+                            feedback = throwable.message ?: throwable::class.simpleName ?: locale.vrcxConnectionFailed
                             feedbackIsError = true
                         } finally {
                             isTesting = false
@@ -204,7 +221,7 @@ internal fun VrcxConnectionEditor(
                     }
                 },
             ) {
-                if (isTesting) CircularProgressIndicator() else Text("测试连接")
+                if (isTesting) CircularProgressIndicator() else Text(locale.vrcxTestConnection)
             }
             Button(
                 enabled = !isDiscovering && !isTesting,
@@ -215,9 +232,11 @@ internal fun VrcxConnectionEditor(
                         feedback = null
                         feedbackIsError = false
                         try {
-                            accountPrefixes = discoverAccounts(candidate)
+                            accountPrefixes = withTimeout(DATABASE_OPERATION_TIMEOUT_MILLIS) {
+                                discoverAccounts(candidate)
+                            }
                             if (accountPrefixes.isEmpty()) {
-                                feedback = "未发现可用的 VRCX 账号，请确认只读用户有元数据权限"
+                                feedback = locale.vrcxNoAccounts
                                 feedbackIsError = true
                             } else if (accountPrefixes.size == 1) {
                                 accountPrefix = accountPrefixes.single()
@@ -226,26 +245,29 @@ internal fun VrcxConnectionEditor(
                                 accountPrefix = ""
                                 pendingConfig = candidate
                                 accountDialogOpen = true
-                                feedback = "发现多个账号，请选择一个"
+                                feedback = locale.vrcxMultipleAccounts
                             }
+                        } catch (_: TimeoutCancellationException) {
+                            feedback = locale.vrcxTimeout
+                            feedbackIsError = true
                         } catch (cancelled: CancellationException) {
                             throw cancelled
                         } catch (throwable: Throwable) {
-                            feedback = throwable.message ?: throwable::class.simpleName ?: "保存失败"
+                            feedback = throwable.message ?: throwable::class.simpleName ?: locale.vrcxSaveFailed
                             feedbackIsError = true
                         } finally {
                             isDiscovering = false
                         }
                     }
                 },
-            ) { Text("保存配置") }
+            ) { Text(locale.vrcxSaveConfiguration) }
         }
     }
 
     if (accountDialogOpen) {
         AlertDialog(
             onDismissRequest = { accountDialogOpen = false },
-            title = { Text("选择 VRCX 账号") },
+            title = { Text(locale.vrcxSelectAccount) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     accountPrefixes.forEach { prefix ->

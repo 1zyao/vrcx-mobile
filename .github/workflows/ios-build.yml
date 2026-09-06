@@ -39,6 +39,12 @@ jobs:
           xcodebuild -version
           java -version
 
+      - name: Stamp build version from commit
+        run: |
+          set -euo pipefail
+          /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $(git rev-parse --short HEAD)" iosApp/iosApp/Info.plist
+          /usr/libexec/PlistBuddy -c "Print :CFBundleVersion" iosApp/iosApp/Info.plist
+
       - name: Build iOS device archive
         run: |
           set -euo pipefail

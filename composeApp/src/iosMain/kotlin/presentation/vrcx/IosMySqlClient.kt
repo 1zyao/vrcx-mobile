@@ -14,7 +14,7 @@ import kotlinx.cinterop.reinterpret
 import kotlinx.cinterop.usePinned
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import platform.CommonCrypto.CC_SHA1
+import io.github.vrcmteam.vrcm.nativecrypto.CC_SHA1
 import platform.posix.AF_INET
 import platform.posix.SOCK_STREAM
 import platform.posix.addrinfo
@@ -77,19 +77,19 @@ private class MySqlConnection(private val host: String, private val port: Int) {
         val result = alloc<CPointerVar<addrinfo>>()
         check(getaddrinfo(host, port.toString(), hints.ptr, result.ptr) == 0) { "无法解析 MySQL 主机" }
         try {
-            val address = result.value ?: error("MySQL 地址为空")
+            val address = result.pointed ?: error("MySQL 地址为空")
             fd = socket(address.pointed.ai_family, address.pointed.ai_socktype, address.pointed.ai_protocol)
             check(fd >= 0 && connect(fd, address.pointed.ai_addr, address.pointed.ai_addrlen) == 0) {
                 "无法连接 MySQL: $host:$port"
             }
         } finally {
-            freeaddrinfo(result.value)
+            freeaddrinfo(result.pointed)
         }
         val handshake = parseHandshake(readPacket())
         require(handshake.plugin == "mysql_native_password") {
             "iOS MySQL 驱动暂不支持 ${handshake.plugin}，仅支持 mysql_native_password"
         }
-        val response = PacketBuilder()
+        val response = MySqlPacketBuilder()
             .int(0x00088205)
             .int(16 * 1024 * 1024)
             .byte(33)
@@ -204,9 +204,9 @@ private fun parseHandshake(packet: ByteArray): MySqlHandshake {
 
 @OptIn(ExperimentalForeignApi::class)
 private fun sha1(value: ByteArray): ByteArray = memScoped {
-    val result = allocArray<ByteVar>(20)
-    value.usePinned { CC_SHA1(it.addressOf(0).reinterpret(), value.size.convert(), result) }
-    ByteArray(20) { result[it] }
+    val digest = allocArray<ByteVar>(20)
+    value.usePinned { CC_SHA1(it.addressOf(0).reinterpret(), value.size.convert(), digest) }
+    ByteArray(20) { digest[it].value }
 }
 
 private fun mysqlNativePassword(password: ByteArray, scramble: ByteArray): ByteArray {
@@ -232,7 +232,7 @@ private fun readLength(packet: ByteArray, start: Int): Triple<Long, Int, String?
     return Triple(length, offset + length.toInt(), packet.decodeToString(offset, offset + length.toInt()))
 }
 
-private class PacketBuilder {
+private class MySqlPacketBuilder {
     private val bytes = mutableListOf<Byte>()
     fun byte(value: Int) { bytes += value.toByte() }
     fun int(value: Int) { repeat(4) { byte(value shr (it * 8)) } }

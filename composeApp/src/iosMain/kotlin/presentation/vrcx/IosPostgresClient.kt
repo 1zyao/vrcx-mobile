@@ -14,13 +14,12 @@ import kotlinx.cinterop.ptr
 import kotlinx.cinterop.usePinned
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import platform.CommonCrypto.CCHmac
-import platform.CommonCrypto.CC_SHA256
-import platform.CommonCrypto.kCCHmacAlgSHA256
+import io.github.vrcmteam.vrcm.nativecrypto.CCHmac
+import io.github.vrcmteam.vrcm.nativecrypto.CC_SHA256
+import io.github.vrcmteam.vrcm.nativecrypto.kCCHmacAlgSHA256
 import platform.posix.AF_INET
 import platform.posix.SOCK_STREAM
 import platform.posix.addrinfo
-import platform.posix.ai_socktype
 import platform.posix.close
 import platform.posix.connect
 import platform.posix.freeaddrinfo
@@ -169,13 +168,13 @@ private class SocketConnection(private val host: String, private val port: Int) 
         val result = alloc<CPointerVar<addrinfo>>()
         check(getaddrinfo(host, port.toString(), hints.ptr, result.ptr) == 0) { "无法解析 PostgreSQL 主机" }
         try {
-            val address = result.value ?: error("PostgreSQL 地址为空")
+            val address = result.pointed ?: error("PostgreSQL 地址为空")
             fd = socket(address.pointed.ai_family, address.pointed.ai_socktype, address.pointed.ai_protocol)
             check(fd >= 0 && connect(fd, address.pointed.ai_addr, address.pointed.ai_addrlen) == 0) {
                 "无法连接 PostgreSQL: $host:$port"
             }
         } finally {
-            freeaddrinfo(result.value)
+            freeaddrinfo(result.pointed)
         }
     }
 
@@ -250,7 +249,7 @@ private fun hi(password: ByteArray, salt: ByteArray, iterations: Int): ByteArray
 
 private fun ByteArray.xor(other: ByteArray) = ByteArray(size) { (this[it].toInt() xor other[it].toInt()).toByte() }
 
-private class PacketBuilder {
+private class PostgresPacketBuilder {
     private val bytes = mutableListOf<Byte>()
     fun int(value: Int) { bytes += byteArrayOf((value shr 24).toByte(), (value shr 16).toByte(), (value shr 8).toByte(), value.toByte()).toList() }
     fun byte(value: Int) { bytes += value.toByte() }
@@ -258,15 +257,15 @@ private class PacketBuilder {
     fun build() = bytes.toByteArray()
 }
 
-private fun byteArray(block: PacketBuilder.() -> Unit) = PacketBuilder().apply(block).build()
+private fun byteArray(block: PostgresPacketBuilder.() -> Unit) = PostgresPacketBuilder().apply(block).build()
 
 private fun ByteArray.writeInt(value: Int, offset: Int) {
     this[offset] = (value shr 24).toByte(); this[offset + 1] = (value shr 16).toByte()
     this[offset + 2] = (value shr 8).toByte(); this[offset + 3] = value.toByte()
 }
 
-private fun ByteArray.readInt(offset: Int) = (this[offset].toInt() and 255 shl 24) or
-    (this[offset + 1].toInt() and 255 shl 16) or (this[offset + 2].toInt() and 255 shl 8) or
+private fun ByteArray.readInt(offset: Int) = ((this[offset].toInt() and 255) shl 24) or
+    ((this[offset + 1].toInt() and 255) shl 16) or ((this[offset + 2].toInt() and 255) shl 8) or
     (this[offset + 3].toInt() and 255)
 
 private fun ByteArray.intAt(offset: Int) = readInt(offset + 1)

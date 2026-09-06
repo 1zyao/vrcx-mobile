@@ -1,3 +1,4 @@
 headers = CommonCrypto/CommonDigest.h CommonCrypto/CommonHMAC.h
+package = io.github.vrcmteam.vrcm.nativecrypto
 compilerOpts = -framework CommonCrypto
 linkerOpts = -framework CommonCrypto

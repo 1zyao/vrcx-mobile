@@ -186,7 +186,7 @@ fun VrcxMobileScreen(    previewEvents: List<VrcxFeedEvent>? = null,
             }
         }
     }
-    LaunchedEffect(events, isPreview) {
+    LaunchedEffect(events, isPreview, friendService.friendMap) {
         val session = SharedFlowCentre.currentSession.value
         if (isPreview || session == null) return@LaunchedEffect
         val ownerUserId = session.account.userId

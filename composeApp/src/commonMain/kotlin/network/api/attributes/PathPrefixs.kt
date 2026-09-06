@@ -1,0 +1,47 @@
+package io.github.vrcmteam.vrcm.network.api.attributes
+
+import io.ktor.http.*
+
+internal const val AUTH_API_PREFIX = "auth"
+
+internal const val INSTANCES_API_SUFFIX = "instances"
+
+internal const val USERS_API_PREFIX = "users"
+
+internal const val USER_API_PREFIX = "user"
+
+internal const val FRIENDS_API_PREFIX = "friends"
+
+internal const val GROUPS_API_PREFIX = "groups"
+
+internal const val FILES_API_PREFIX = "files"
+
+internal const val FILE_API_PREFIX = "file"
+
+internal const val PRINTS_API_PREFIX = "prints"
+
+internal const val WORLDS_API_PREFIX = "worlds"
+
+internal const val AVATARS_API_PREFIX = "avatars"
+
+internal const val INVITE_API_PREFIX = "invite"
+
+internal const val NOTIFICATIONS_API_PREFIX = "notifications"
+
+internal const val FAVORITE_API_PREFIX = "favorite"
+
+internal const val USER_NOTES_API_PREFIX = "userNotes"
+
+internal const val FAVORITES_API_PREFIX = "favorites"
+
+internal const val FAVORITE_LIMITS_API_SUFFIX = "favoritelimits"
+
+internal const val VRC_API_URL = "https://api.vrchat.cloud/api/1/"
+
+internal const val VRC_WSS_URL = "wss://pipeline.vrchat.cloud"
+
+internal val VRC_API_HOST = Url(VRC_API_URL).host
+
+const val AUTH_COOKIE = "auth"
+
+const val TWO_FACTOR_AUTH_COOKIE = "twoFactorAuth"

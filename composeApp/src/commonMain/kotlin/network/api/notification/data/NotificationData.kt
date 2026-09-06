@@ -1,0 +1,50 @@
+package io.github.vrcmteam.vrcm.network.api.notification.data
+
+import kotlinx.serialization.Serializable
+
+@Serializable
+data class NotificationData(
+    val canDelete: Boolean,
+    val category: String,
+    val createdAt: String,
+    val data: Data,
+    /** Newer notification responses place Boop metadata here instead of in `data`. */
+    val details: Data? = null,
+    val expiresAt: String,
+    val expiryAfterSeen: Int?,
+    val id: String,
+    val groupId: String? = null,
+    val ignoreDND: Boolean,
+    val imageUrl: String?,
+    val isSystem: Boolean,
+    val link: String?,
+    val linkText: String?,
+    val linkTextKey: String?,
+    val message: String,
+    val messageKey: String?,
+    val receiverUserId: String,
+    val relatedNotificationsId: String?,
+    val requireSeen: Boolean,
+    val responses: List<ResponseData>,
+    val seen: Boolean,
+    val senderUserId: String?,
+    val senderUsername: String?,
+    val title: String?,
+    val titleKey: String?,
+    val type: String,
+    val updatedAt: String,
+    val version: Int
+){
+    @Serializable
+    data class Data(
+        val announcementTitle: String? = null,
+        val boopingUserDisplayName: String? = null,
+        val groupName: String? = null,
+        val groupId: String? = null,
+        val ownerId: String? = null,
+        val imageUrl: String? = null,
+        val emojiId: String? = null,
+        val emojiVersion: Int? = null,
+        val inventoryItemId: String? = null,
+    )
+}

@@ -1,0 +1,40 @@
+package io.github.vrcmteam.vrcm.network.api.groups.data
+
+import kotlinx.serialization.Serializable
+
+@Serializable
+data class GroupData(
+    val ageVerificationBetaCode: String? = null,
+    val ageVerificationBetaSlots: Int? = null,
+    val ageVerificationSlotsAvailable: Boolean? = null,
+    val allowGroupJoinPrompt: Boolean? = null,
+    val badges: List<String> = emptyList(),
+    val bannerId: String? = null,
+    val bannerUrl: String? = null,
+    val createdAt: String = "",
+    val description: String = "",
+    val discriminator: String = "",
+    val galleries: List<Gallery> = emptyList(),
+    val iconId: String? = null,
+    val iconUrl: String? = null,
+    val id: String = "",
+    val isVerified: Boolean = false,
+    val joinState: String = "",
+    val languages: List<String> = emptyList(),
+    val lastPostCreatedAt: String? = null,
+    val links: List<String> = emptyList(),
+    val memberCount: Int = 0,
+    val memberCountSyncedAt: String = "",
+    val membershipStatus: String = "",
+    val myMember: MyMember? = null,
+    val name: String = "",
+    val onlineMemberCount: Int = 0,
+    val ownerId: String = "",
+    val privacy: String = "",
+    val roles: List<Role>? = null,
+    val rules: String? = null,
+    val shortCode: String = "",
+    val tags: List<String> = emptyList(),
+    val transferTargetId: String? = null,
+    val updatedAt: String? = null,
+)

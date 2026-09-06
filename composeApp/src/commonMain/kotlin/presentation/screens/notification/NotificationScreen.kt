@@ -1,0 +1,384 @@
+package io.github.vrcmteam.vrcm.presentation.screens.notification
+
+import androidx.compose.animation.*
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyItemScope
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.EmojiEmotions
+import androidx.compose.material.icons.outlined.FavoriteBorder
+import androidx.compose.material.icons.outlined.PsychologyAlt
+import androidx.compose.material.icons.outlined.SentimentDissatisfied
+import androidx.compose.material.icons.outlined.SentimentVerySatisfied
+import androidx.compose.material.icons.outlined.ThumbUpOffAlt
+import androidx.compose.material.icons.outlined.TouchApp
+import androidx.compose.material.icons.outlined.WavingHand
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import io.github.vrcmteam.vrcm.presentation.navigation.LocalNavigator
+import io.github.vrcmteam.vrcm.presentation.navigation.currentOrThrow
+import io.github.vrcmteam.vrcm.presentation.navigation.rememberContainerTransformToken
+import io.github.vrcmteam.vrcm.core.extensions.capitalizeFirst
+import io.github.vrcmteam.vrcm.network.api.attributes.NotificationType
+import io.github.vrcmteam.vrcm.presentation.compoments.AImage
+import io.github.vrcmteam.vrcm.presentation.compoments.LocalSharedSuffixKey
+import io.github.vrcmteam.vrcm.presentation.compoments.sharedBoundsBy
+import io.github.vrcmteam.vrcm.presentation.extensions.enableIf
+import io.github.vrcmteam.vrcm.presentation.extensions.ignoredFormat
+import io.github.vrcmteam.vrcm.presentation.navigation.AppDetailRoute
+import io.github.vrcmteam.vrcm.presentation.screens.home.data.NotificationItemData
+import io.github.vrcmteam.vrcm.presentation.screens.home.data.NotificationResponseTarget
+import io.github.vrcmteam.vrcm.presentation.screens.home.data.indexOfNotificationTarget
+import io.github.vrcmteam.vrcm.presentation.screens.home.data.responseTarget
+import io.github.vrcmteam.vrcm.presentation.screens.user.BoopSelectorDialog
+import io.github.vrcmteam.vrcm.presentation.screens.user.UserProfileScreen
+import io.github.vrcmteam.vrcm.presentation.screens.user.data.UserProfileVo
+import io.github.vrcmteam.vrcm.presentation.settings.locale.strings
+import io.github.vrcmteam.vrcm.presentation.supports.AppIcons
+import kotlinx.datetime.Instant
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.toLocalDateTime
+import kotlinx.serialization.Serializable
+import org.koin.compose.koinInject
+import kotlin.time.ExperimentalTime
+
+@Serializable
+data class NotificationScreen(
+    val targetNotificationId: String? = null,
+) : AppDetailRoute {
+    override val key = "NotificationScreen:${targetNotificationId.orEmpty()}"
+
+    @OptIn(ExperimentalMaterial3Api::class)
+    @Composable
+    override fun Content() {
+        val notificationCenter = koinInject<NotificationCenterModel>()
+        val navigator = LocalNavigator.currentOrThrow
+        // 每打开一次刷新一次
+        LaunchedEffect(Unit) {
+            notificationCenter.refreshAllNotification()
+        }
+        val notifications: List<NotificationItemData> by remember {
+            derivedStateOf {
+                (notificationCenter.friendRequestNotifications + notificationCenter.notifications)
+                    .sortedByDescending { it.createdAt }
+            }
+        }
+        val listState = rememberLazyListState()
+        var lastTargetIndex by remember(targetNotificationId) { mutableIntStateOf(-1) }
+        LaunchedEffect(targetNotificationId, notifications) {
+            val targetIndex = notifications.indexOfNotificationTarget(targetNotificationId)
+            if (targetIndex < 0 || targetIndex == lastTargetIndex) return@LaunchedEffect
+            listState.animateScrollToItem(targetIndex)
+            // Only mark the target after the animation completes. A list refresh can cancel this
+            // effect, in which case the next snapshot must retry even if the index is unchanged.
+            lastTargetIndex = targetIndex
+        }
+        var boopReply by remember { mutableStateOf<BoopReply?>(null) }
+        val boopSuccessMessage = strings.profileBoopSuccess
+        val boopAlreadySentMessage = strings.profileBoopAlreadySent
+        val boopDisabledMessage = strings.profileBoopDisabled
+        val onResponseNotification: (NotificationItemData, NotificationItemData.ActionData) -> Unit = { item, response ->
+            if (item.responseTarget(response) == NotificationResponseTarget.BOOP_USER_API) {
+                boopReply = BoopReply(item, response)
+            } else {
+                notificationCenter.responseAllNotification(
+                    item = item,
+                    action = response,
+                    boopSuccessMessage = boopSuccessMessage,
+                    boopAlreadySentMessage = boopAlreadySentMessage,
+                    boopDisabledMessage = boopDisabledMessage,
+                )
+            }
+        }
+
+        val currentBoopReply = boopReply
+        val boopReplySending = currentBoopReply?.let {
+            notificationCenter.pendingNotificationActions[it.item.id] == it.action
+        } == true
+        val boopReplyStillExists = currentBoopReply?.let { reply ->
+            notifications.any { it.id == reply.item.id }
+        } ?: true
+        LaunchedEffect(currentBoopReply?.item?.id, boopReplyStillExists) {
+            if (currentBoopReply != null && !boopReplyStillExists) boopReply = null
+        }
+
+        Scaffold(
+            topBar = {
+                TopAppBar(
+                    title = { Text(strings.notificationSectionInbox) },
+                    navigationIcon = {
+                        IconButton(onClick = { navigator.pop() }) {
+                            Icon(
+                                imageVector = AppIcons.ArrowBackIosNew,
+                                contentDescription = "Back",
+                            )
+                        }
+                    },
+                )
+            },
+        ) { contentPadding ->
+            if (notifications.isEmpty()) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(contentPadding),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        modifier = Modifier.padding(16.dp),
+                        text = strings.homeNotificationEmpty,
+                        textAlign = TextAlign.Center,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        style = MaterialTheme.typography.titleLarge,
+                    )
+                }
+            } else {
+                LazyColumn(
+                    state = listState,
+                    modifier = Modifier.fillMaxSize().navigationBarsPadding(),
+                    contentPadding = PaddingValues(
+                        start = 12.dp,
+                        top = contentPadding.calculateTopPadding() + 12.dp,
+                        end = 12.dp,
+                        bottom = contentPadding.calculateBottomPadding() + 12.dp,
+                    ),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    items(notifications, key = { it.id }) { item ->
+                        NotificationItem(
+                            item = item,
+                            loadingAction = notificationCenter.pendingNotificationActions[item.id],
+                            onResponse = onResponseNotification,
+                        )
+                    }
+                }
+            }
+        }
+        BoopSelectorDialog(
+            visible = currentBoopReply != null,
+            targetName = currentBoopReply?.item?.title
+                ?: currentBoopReply?.item?.message.orEmpty(),
+            sending = boopReplySending,
+            onDismiss = { boopReply = null },
+            onSend = { emojiId ->
+                currentBoopReply?.let { reply ->
+                    notificationCenter.responseAllNotification(
+                        item = reply.item,
+                        action = reply.action,
+                        boopEmojiId = emojiId,
+                        boopSuccessMessage = boopSuccessMessage,
+                        boopAlreadySentMessage = boopAlreadySentMessage,
+                        boopDisabledMessage = boopDisabledMessage,
+                    )
+                }
+            },
+        )
+    }
+}
+
+private data class BoopReply(
+    val item: NotificationItemData,
+    val action: NotificationItemData.ActionData,
+)
+
+@OptIn(ExperimentalSharedTransitionApi::class, ExperimentalMaterial3Api::class)
+@Composable
+private fun LazyItemScope.NotificationItem(
+    item: NotificationItemData,
+    loadingAction: NotificationItemData.ActionData?,
+    onResponse: (NotificationItemData, NotificationItemData.ActionData) -> Unit,
+) {
+    var isExpand by remember { mutableStateOf(false) }
+    val isFriendRequest = item.type == NotificationType.FriendRequest.value
+    val senderId = item.senderId.orEmpty()
+    val linkedUserId = item.linkedUserId.orEmpty()
+    val sharedSuffixKey = rememberContainerTransformToken(
+        "notification:${item.id}:user:$senderId",
+    ) ?: LocalSharedSuffixKey.current
+    val contentText = if (isFriendRequest) "${item.message} ${strings.notificationFriendRequest}" else item.message
+    val navigator = LocalNavigator.currentOrThrow
+    Box(
+        modifier = Modifier.fillMaxWidth().animateItem()
+            .clip(MaterialTheme.shapes.large)
+            .background(MaterialTheme.colorScheme.surface)
+    ) {
+        Column(
+            modifier = Modifier.fillMaxWidth().padding(6.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            Row(
+                modifier = Modifier.height(80.dp).fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                AImage(
+                    modifier = Modifier
+                        .enableIf(senderId.isNotEmpty()) {
+                            this.clickable {
+                                navigator push UserProfileScreen(
+                                    userProfileVO = UserProfileVo(
+                                        id = senderId,
+                                        profileImageUrl = item.imageUrl
+                                    ),
+                                    sharedSuffixKey = sharedSuffixKey,
+                                )
+                            }.sharedBoundsBy(
+                                key = "${senderId}UserIcon",
+                                suffixKey = sharedSuffixKey,
+                            )
+                        }
+                        .size(120.dp, 80.dp)
+                        .background(MaterialTheme.colorScheme.surfaceContainerHighest, MaterialTheme.shapes.medium)
+                        .clip(MaterialTheme.shapes.medium),
+                    imageData = item.imageUrl
+                )
+                Column {
+                    TooltipBox(
+                        positionProvider = TooltipDefaults.rememberPlainTooltipPositionProvider(),
+                        tooltip = {
+                            PlainTooltip {
+                                Text(text = item.title ?: item.message)
+                            }
+                        },
+                        state = rememberTooltipState()
+                    ) {
+                        Text(
+                            modifier = Modifier.fillMaxWidth(),
+                            text = item.title ?: item.message,
+                            style = MaterialTheme.typography.titleSmall,
+                            color = MaterialTheme.colorScheme.primary,
+                            overflow = TextOverflow.Ellipsis,
+                            maxLines = 2,
+                        )
+                    }
+                    Spacer(Modifier.weight(1f))
+                    if (item.type.equals("boop", ignoreCase = true)) {
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Icon(
+                                imageVector = boopIcon(item.boopEmojiId),
+                                contentDescription = strings.profileBoop,
+                                modifier = Modifier.size(16.dp),
+                                tint = MaterialTheme.colorScheme.tertiary,
+                            )
+                            Text(
+                                text = strings.profileBoop,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    } else {
+                        Text(
+                            text = item.type,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Text(
+                        text = remember {
+                            @OptIn(ExperimentalTime::class)
+                            Instant.parse(item.createdAt).toLocalDateTime(TimeZone.currentSystemDefault()).ignoredFormat
+                        },
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.outlineVariant
+                    )
+                }
+            }
+            Row(
+                modifier = Modifier.fillMaxWidth().height(32.dp),
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                Spacer(modifier = Modifier.weight(1f))
+                item.actions.forEach { action ->
+                    val isLoading = loadingAction == action
+                    FilledTonalButton(
+                        modifier = Modifier.animateContentSize(),
+                        enabled = loadingAction == null,
+                        colors = ButtonDefaults.outlinedButtonColors(
+                            containerColor = MaterialTheme.colorScheme.tertiaryContainer,
+                        ),
+                        onClick = {
+                            if (action.type.equals("link", ignoreCase = true) && linkedUserId.isNotEmpty()) {
+                                navigator push UserProfileScreen(
+                                    userProfileVO = UserProfileVo(
+                                        id = linkedUserId,
+                                        profileImageUrl = item.imageUrl
+                                    ),
+                                    sharedSuffixKey = sharedSuffixKey,
+                                )
+                            } else {
+                                onResponse(item, action)
+                            }
+                        }
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Text(
+                                modifier = Modifier.alpha(if (isLoading) 0f else 1f),
+                                text = action.type.capitalizeFirst(),
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.onTertiaryContainer
+                            )
+                            if (isLoading) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(18.dp),
+                                    color = MaterialTheme.colorScheme.onTertiaryContainer,
+                                    strokeWidth = 2.dp,
+                                )
+                            }
+                        }
+                    }
+                }
+                IconButton(
+                    onClick = { isExpand = !isExpand }
+                ) {
+                    Icon(
+                        imageVector = if (isExpand) AppIcons.ExpandLess else AppIcons.ExpandMore,
+                        contentDescription = "ExpandIconButton"
+                    )
+                }
+            }
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(
+                        color = MaterialTheme.colorScheme.surfaceContainer,
+                        shape = MaterialTheme.shapes.small
+                    )
+                    .animateContentSize()
+            ) {
+                if (isExpand) {
+                    Text(
+                        modifier = Modifier.padding(6.dp),
+                        text = contentText,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+
+        }
+    }
+}
+
+private fun boopIcon(emojiId: String?) = when (emojiId?.lowercase()) {
+    "default_heart" -> Icons.Outlined.FavoriteBorder
+    "default_hand_wave" -> Icons.Outlined.WavingHand
+    "default_laugh" -> Icons.Outlined.SentimentVerySatisfied
+    "default_thumbs_up" -> Icons.Outlined.ThumbUpOffAlt
+    "default_thinking" -> Icons.Outlined.PsychologyAlt
+    "default_wow" -> Icons.Outlined.EmojiEmotions
+    "default_angry" -> Icons.Outlined.SentimentDissatisfied
+    else -> Icons.Outlined.TouchApp
+}

@@ -1,0 +1,81 @@
+package io.github.vrcmteam.vrcm.di.modules
+
+import io.github.vrcmteam.vrcm.network.api.avatars.AvatarsApi
+import io.github.vrcmteam.vrcm.network.api.auth.AuthApi
+import io.github.vrcmteam.vrcm.network.api.favorite.FavoriteApi
+import io.github.vrcmteam.vrcm.network.api.files.FileApi
+import io.github.vrcmteam.vrcm.network.api.friends.FriendsApi
+import io.github.vrcmteam.vrcm.network.api.github.GitHubApi
+import io.github.vrcmteam.vrcm.network.api.groups.GroupsApi
+import io.github.vrcmteam.vrcm.network.api.instances.InstancesApi
+import io.github.vrcmteam.vrcm.network.api.inventory.InventoryApi
+import io.github.vrcmteam.vrcm.network.api.invite.InviteApi
+import io.github.vrcmteam.vrcm.network.api.notification.NotificationApi
+import io.github.vrcmteam.vrcm.network.api.prints.PrintsApi
+import io.github.vrcmteam.vrcm.network.api.profile.ProfileAppearanceApi
+import io.github.vrcmteam.vrcm.network.api.status.VrchatStatusApi
+import io.github.vrcmteam.vrcm.network.api.users.UsersApi
+import io.github.vrcmteam.vrcm.network.api.worlds.WorldsApi
+import io.github.vrcmteam.vrcm.network.supports.ApiNoticeCenter
+import io.github.vrcmteam.vrcm.network.supports.configureApiClient
+import io.github.vrcmteam.vrcm.network.websocket.WebSocketApi
+import io.ktor.client.*
+import io.ktor.client.plugins.contentnegotiation.*
+import io.ktor.client.plugins.cookies.*
+import io.ktor.serialization.kotlinx.json.*
+import kotlinx.serialization.json.Json
+import org.koin.core.definition.Definition
+import org.koin.core.module.dsl.singleOf
+import org.koin.dsl.module
+
+internal val networkModule = module(true) {
+    singleOf(::AuthApi)
+    singleOf(::AvatarsApi)
+    singleOf(::FileApi)
+    singleOf(::FriendsApi)
+    singleOf(::InstancesApi)
+    singleOf(::UsersApi)
+    singleOf(::NotificationApi)
+    singleOf(::InviteApi)
+    singleOf(::WorldsApi)
+    singleOf(::FavoriteApi)
+    singleOf(::WebSocketApi)
+    singleOf(::GitHubApi)
+    singleOf(::GroupsApi)
+    singleOf(::PrintsApi)
+    singleOf(::ProfileAppearanceApi)
+    singleOf(::VrchatStatusApi)
+    singleOf(::InventoryApi)
+    singleOf(::ApiNoticeCenter)
+    single<HttpClient> { apiClientDefinition(it) }
+    single { createNetworkJson() }
+}
+
+internal fun createNetworkJson() = Json {
+    ignoreUnknownKeys = true
+    encodeDefaults = true
+    explicitNulls = false
+    prettyPrint = true
+    isLenient = true
+}
+
+private val apiClientDefinition: Definition<HttpClient> = {
+    HttpClient {
+        configureApiClient(
+            apiNoticeCenter = get(),
+            webSocketJson = get(),
+        )
+        // api的json序列化器
+        install(ContentNegotiation) {
+            json(get())
+        }
+        install(HttpCookies) {
+            this.storage = get()
+        }
+//        install(HttpCallValidator){
+//            handleResponseExceptionWithRequest{ cause, request ->
+//                SharedFlowCentre.toastText.emit(ToastText.Error(cause.message?: "Unknown error occurred in ${request.url}"))
+//            }
+//        }
+    }
+}

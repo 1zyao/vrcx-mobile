@@ -1,0 +1,79 @@
+package io.github.vrcmteam.vrcm.presentation.screens.home.data
+
+import io.github.vrcmteam.vrcm.network.api.notification.data.NotificationData
+
+data class NotificationItemData(
+    val id: String,
+    val imageUrl: String,
+    val title: String?,
+    val message: String,
+    val createdAt: String,
+    val senderUserId: String,
+    val link: String?,
+    val type: String,
+    val actions: List<ActionData>,
+    /** The selected default or custom Boop emoji identifier, when VRChat supplies it. */
+    val boopEmojiId: String? = null,
+    /** Pipeline events can reference this inbox item through a different notification ID. */
+    val relatedNotificationId: String? = null,
+) {
+    /** The notification sender used by sender-specific actions such as opening a profile or replying to a Boop. */
+    val senderId: String?
+        get() = senderUserId.trim().takeIf { it.isNotEmpty() }
+
+    /** The VRChat user targeted by a `user:usr_...` notification link. */
+    val linkedUserId: String?
+        get() = link
+            ?.takeIf { it.startsWith("user:") }
+            ?.removePrefix("user:")
+            ?.takeIf { it.isNotBlank() }
+
+    data class ActionData(
+        val data: String,
+        val type: String,
+        val icon: String = "",
+    )
+
+    constructor(n: NotificationData) : this(
+        id = n.id,
+        imageUrl = n.imageUrl.orEmpty(),
+        title = n.title,
+        message = n.message,
+        createdAt = n.createdAt,
+        senderUserId = n.senderUserId.orEmpty(),
+        link = n.link,
+        type = n.type,
+        actions = n.responses.map { responses ->
+            ActionData(
+                data = responses.responseData,
+                type = responses.type,
+                icon = responses.icon,
+            )
+        },
+        relatedNotificationId = n.relatedNotificationsId,
+        boopEmojiId = n.details?.emojiId ?: n.data.emojiId,
+    )
+
+}
+
+/** Resolves either the inbox ID or the related Pipeline event ID to its rendered item. */
+internal fun List<NotificationItemData>.indexOfNotificationTarget(targetId: String?): Int {
+    val requestedId = targetId?.takeIf(String::isNotBlank) ?: return -1
+    return indexOfFirst { item ->
+        item.id == requestedId || item.relatedNotificationId == requestedId
+    }
+}
+
+internal enum class NotificationResponseTarget {
+    BOOP_USER_API,
+    NOTIFICATION_API,
+}
+
+internal fun NotificationItemData.responseTarget(
+    action: NotificationItemData.ActionData,
+): NotificationResponseTarget =
+    if (type == "boop" && action.icon.equals("reply", ignoreCase = true)) {
+        NotificationResponseTarget.BOOP_USER_API
+    } else {
+        NotificationResponseTarget.NOTIFICATION_API
+    }

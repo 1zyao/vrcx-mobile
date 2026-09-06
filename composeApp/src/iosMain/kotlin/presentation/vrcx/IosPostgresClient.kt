@@ -1,11 +1,13 @@
 package io.github.vrcmteam.vrcm.presentation.vrcx
 
-import kotlinx.cinterop.ByteVar
 import kotlinx.cinterop.CPointer
 import kotlinx.cinterop.CPointerVar
 import kotlinx.cinterop.ExperimentalForeignApi
+import kotlinx.cinterop.addressOf
+import kotlinx.cinterop.convert
 import kotlinx.cinterop.memScoped
 import kotlinx.cinterop.ptr
+import kotlinx.cinterop.usePinned
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import platform.posix.AF_INET
@@ -154,19 +156,20 @@ private class SocketConnection(private val host: String, private val port: Int) 
     }
 
     private fun connectSocket() = memScoped {
-        val hints = alloc<addrinfo>()
-        hints.ai_family = AF_INET
-        hints.ai_socktype = SOCK_STREAM
+        val hints = addrinfo().apply {
+            ai_family = AF_INET
+            ai_socktype = SOCK_STREAM
+        }
         val result = alloc<CPointerVar<addrinfo>>()
         check(getaddrinfo(host, port.toString(), hints.ptr, result.ptr) == 0) { "无法解析 PostgreSQL 主机" }
         try {
-            val address = result.value ?: error("PostgreSQL 地址为空")
+            val address = result.pointed
             fd = socket(address.pointed.ai_family, address.pointed.ai_socktype, address.pointed.ai_protocol)
             check(fd >= 0 && connect(fd, address.pointed.ai_addr, address.pointed.ai_addrlen) == 0) {
                 "无法连接 PostgreSQL: $host:$port"
             }
         } finally {
-            result.value?.let(::freeaddrinfo)
+            freeaddrinfo(result.value)
         }
     }
 

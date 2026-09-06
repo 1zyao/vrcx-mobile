@@ -67,6 +67,7 @@ import io.github.vrcmteam.vrcm.presentation.extensions.ignoredFormat
 import io.github.vrcmteam.vrcm.presentation.settings.locale.LocaleStrings
 import io.github.vrcmteam.vrcm.presentation.settings.locale.strings
 import io.github.vrcmteam.vrcm.presentation.theme.GameColor
+import io.github.vrcmteam.vrcm.service.FriendService
 import io.github.vrcmteam.vrcm.storage.UserProfileCacheStore
 import io.github.vrcmteam.vrcm.storage.data.UserProfileCache
 import org.koin.compose.koinInject
@@ -109,6 +110,7 @@ fun VrcxMobileScreen(    previewEvents: List<VrcxFeedEvent>? = null,
     val listState = rememberLazyListState()
     val usersApi: UsersApi = koinInject()
     val userProfileCacheStore: UserProfileCacheStore = koinInject()
+    val friendService: FriendService = koinInject()
     val locale = strings
 
     /** 预览模式使用与远程查询一致的包含式筛选；正常模式使用远端查询结果。 */
@@ -204,6 +206,13 @@ fun VrcxMobileScreen(    previewEvents: List<VrcxFeedEvent>? = null,
             }.toMap()
         }
         if (cached.isNotEmpty()) userIcons = userIcons + cached
+        // 对齐主页机制：好友头像在 FriendService 内存缓存里，命中即秒出
+        val fromFriends = withContext(Dispatchers.Default) {
+            allIds.mapNotNull { userId ->
+                friendService.friendMap[userId]?.userIcon?.let { userId to it }
+            }.toMap()
+        }
+        if (fromFriends.isNotEmpty()) userIcons = userIcons + fromFriends
         val missingIds = allIds.filter { it !in userIcons }
         if (missingIds.isEmpty()) return@LaunchedEffect
         val loaded = withContext(Dispatchers.Default) {

@@ -11,6 +11,8 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
@@ -19,6 +21,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.CloudOff
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Face
@@ -55,6 +58,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.layout.WindowInsets
 import io.github.vrcmteam.vrcm.core.shared.SharedFlowCentre
 import io.github.vrcmteam.vrcm.network.api.users.UsersApi
+import io.github.vrcmteam.vrcm.network.api.attributes.UserStatus
 import io.github.vrcmteam.vrcm.presentation.compoments.UserStateIcon
 import io.github.vrcmteam.vrcm.presentation.compoments.RefreshBox
 import io.github.vrcmteam.vrcm.presentation.compoments.SearchTextField
@@ -62,6 +66,7 @@ import io.github.vrcmteam.vrcm.presentation.extensions.getInsetPadding
 import io.github.vrcmteam.vrcm.presentation.extensions.ignoredFormat
 import io.github.vrcmteam.vrcm.presentation.settings.locale.LocaleStrings
 import io.github.vrcmteam.vrcm.presentation.settings.locale.strings
+import io.github.vrcmteam.vrcm.presentation.theme.GameColor
 import org.koin.compose.koinInject
 import kotlin.coroutines.cancellation.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -387,36 +392,38 @@ private fun describe(event: VrcxFeedEvent, locale: LocaleStrings): FeedEventText
         val location = parseFeedLocation(event.location)
         FeedEventText(
             headline = locale.vrcxLocationChanged,
-            // VRCX 的 world ID 只用于查询，不直接展示给用户。
-            subtitle = event.worldName?.let { "${locale.vrcxEnter} $it" },
+            subtitle = when {
+                location?.access == FeedLocationAccess.Private -> locale.vrcxPrivateRoom
+                event.worldName != null -> locale.vrcxCurrentLocation.replace("%s", locationText(event, locale))
+                else -> null
+            },
             meta = listOfNotNull(
-                event.groupName?.let { "${locale.vrcxGroup} $it" },
-                event.worldName?.let { "${locale.vrcxWorld}：$it" },
                 location?.instanceId?.let { "${locale.vrcxRoom} ${it.take(12)}" },
             ),
         )
     }
-    FeedType.Online, FeedType.Offline -> FeedEventText(
-        headline = if (event.type == FeedType.Online) locale.vrcxOnlineEvent else locale.vrcxOfflineEvent,
-         subtitle = event.worldName?.let { "${locale.vrcxLocatedIn}：$it" },
+    FeedType.Online -> FeedEventText(
+        headline = event.worldName?.let { locale.vrcxOnlineAt.replace("%s", locationText(event, locale)) }
+            ?: locale.vrcxOnlineEvent,
+        subtitle = null,
         meta = listOfNotNull(
-            event.worldName?.let { "${locale.vrcxWorld}：$it" },
             parseFeedLocation(event.location)?.instanceId?.let { "${locale.vrcxRoom} ${it.take(12)}" },
-            event.groupName?.let { "${locale.vrcxGroup} $it" },
         ),
     )
+    FeedType.Offline -> FeedEventText(
+        headline = locale.vrcxOfflineEvent,
+        subtitle = null,
+        meta = emptyList(),
+    )
     FeedType.Status -> FeedEventText(
-         headline = event.status ?: locale.vrcxStatusChanged,
-        subtitle = when {
-            event.statusDescription != null -> event.statusDescription
-            event.previousStatus != null && event.previousStatus != event.status ->
-                locale.vrcxOriginalStatus.replace("%s", event.previousStatus)
-            else -> null
-        },
+        headline = locale.vrcxStatusChanged,
+        subtitle = event.status?.let { status ->
+            locale.vrcxStatusUpdate.replaceFirst("%s", status).replaceFirst("%s", event.statusDescription.orEmpty())
+        } ?: event.statusDescription,
         meta = emptyList(),
     )
     FeedType.Bio -> FeedEventText(
-         headline = locale.vrcxBioChanged,
+        headline = locale.vrcxBioUpdate,
         subtitle = event.bio,
         meta = listOfNotNull(
             event.previousBio?.takeIf { it != event.bio }?.let { locale.vrcxOriginalBio.replace("%s", it) },
@@ -427,6 +434,29 @@ private fun describe(event: VrcxFeedEvent, locale: LocaleStrings): FeedEventText
         subtitle = null,
          meta = listOfNotNull(event.ownerId?.let { locale.vrcxModelAuthor.replace("%s", it) }),
     )
+}
+
+private fun locationText(event: VrcxFeedEvent, locale: LocaleStrings): String {
+    val location = parseFeedLocation(event.location)
+    if (location?.access == FeedLocationAccess.Private) return locale.vrcxPrivateRoom
+    val world = event.worldName ?: return locationAccessLabel(location?.access, locale)
+    val access = locationAccessLabel(location?.access, locale)
+    return buildString {
+        append(world)
+        append(" · ")
+        append(access)
+        event.groupName?.let { append(" (${locale.vrcxGroup} $it)") }
+    }
+}
+
+private fun locationAccessLabel(access: FeedLocationAccess?, locale: LocaleStrings): String = when (access) {
+    FeedLocationAccess.FriendsPlus -> locale.friendActivityAccessFriendsPlus
+    FeedLocationAccess.Friends -> locale.friendActivityAccessFriends
+    FeedLocationAccess.InvitePlus -> locale.friendActivityAccessInvitePlus
+    FeedLocationAccess.Invite -> locale.friendActivityAccessInvite
+    FeedLocationAccess.Group -> locale.friendActivityAccessGroup
+    FeedLocationAccess.Private -> locale.vrcxPrivateRoom
+    FeedLocationAccess.Unknown, null, FeedLocationAccess.Public -> locale.friendActivityAccessPublic
 }
 
 @Composable
@@ -442,10 +472,7 @@ private fun FeedEventCard(event: VrcxFeedEvent, userIcon: String?, locale: Local
                 modifier = Modifier.size(42.dp).background(accent.copy(alpha = 0.16f), CircleShape),
                 contentAlignment = Alignment.Center,
             ) {
-                UserStateIcon(
-                    iconUrl = userIcon,
-                    modifier = Modifier.size(42.dp),
-                )
+                UserStateIcon(iconUrl = userIcon, modifier = Modifier.size(42.dp))
             }
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(5.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -461,22 +488,106 @@ private fun FeedEventCard(event: VrcxFeedEvent, userIcon: String?, locale: Local
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
-                Text(text.headline, style = MaterialTheme.typography.bodyLarge)
-                text.subtitle?.let {
-                    Text(
-                        it,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
+                if (event.type == FeedType.Status) {
+                    StatusChange(event)
+                } else {
+                    Text(text.headline, style = MaterialTheme.typography.bodyLarge)
                 }
-                if (text.meta.isNotEmpty()) {
-                    Text(
-                        text.meta.joinToString(" · "),
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.outline,
-                    )
+                if (event.type != FeedType.Status) {
+                    text.subtitle?.let {
+                        Text(
+                            it,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    if (text.meta.isNotEmpty()) {
+                        Text(
+                            text.meta.joinToString(" · "),
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.outline,
+                        )
+                    }
                 }
             }
         }
     }
 }
+
+@Composable
+private fun StatusChange(event: VrcxFeedEvent) {
+    val previous = event.previousStatus?.takeIf { it != event.status }
+    val colorChanged = previous != null && statusColor(previous) != statusColor(event.status)
+    val descriptionChanged = event.previousStatusDescription != event.statusDescription
+
+    Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+        Row(
+            modifier = Modifier.height(24.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            if (colorChanged) {
+                StatusDot(statusColor(previous))
+                Icon(
+                    Icons.AutoMirrored.Filled.ArrowForward,
+                    contentDescription = null,
+                    modifier = Modifier.size(18.dp),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            StatusDot(statusColor(event.status))
+            if (!colorChanged || descriptionChanged) {
+                event.statusDescription?.takeIf { it.isNotBlank() }?.let {
+                    Text(
+                        it,
+                        modifier = Modifier.offset(y = (-1).dp),
+                        style = MaterialTheme.typography.bodyLarge,
+                    )
+                }
+            }
+        }
+
+        if (colorChanged && descriptionChanged) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(5.dp),
+            ) {
+                StatusDot(statusColor(previous))
+                Text(
+                    event.previousStatusDescription.orEmpty(),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Icon(
+                    Icons.AutoMirrored.Filled.ArrowForward,
+                    contentDescription = null,
+                    modifier = Modifier.size(14.dp),
+                    tint = MaterialTheme.colorScheme.outline,
+                )
+                StatusDot(statusColor(event.status))
+                Text(
+                    event.statusDescription.orEmpty(),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        } else if (!colorChanged && descriptionChanged && event.previousStatusDescription != null) {
+            Text(
+                event.previousStatusDescription,
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+}
+
+@Composable
+private fun StatusDot(color: Color) {
+    Box(Modifier.size(18.dp), contentAlignment = Alignment.Center) {
+        Box(Modifier.size(10.dp).background(color, CircleShape))
+    }
+}
+
+private fun statusColor(status: String?): Color = GameColor.Status.fromValue(
+    UserStatus.entries.firstOrNull { it.value.equals(status, ignoreCase = true) },
+)

@@ -32,16 +32,30 @@ enum class FeedType { GPS, Status, Bio, Avatar, Online, Offline }
 data class FeedLocationDisplay(
     val worldId: String,
     val instanceId: String?,
+    val access: FeedLocationAccess = FeedLocationAccess.Public,
 )
+
+enum class FeedLocationAccess { Public, FriendsPlus, Friends, InvitePlus, Invite, Group, Private, Unknown }
 
 fun parseFeedLocation(location: String?): FeedLocationDisplay? {
     val value = location?.trim().orEmpty()
+    if (value == "private" || value == "private:private") {
+        return FeedLocationDisplay("", null, FeedLocationAccess.Private)
+    }
     if (!value.startsWith("wrld_")) return null
     val separator = value.indexOf(':')
     val worldId = if (separator >= 0) value.substring(0, separator) else value
     if (!worldId.matches(Regex("wrld_[A-Za-z0-9-]+"))) return null
     val instance = value.substringAfter(':', "").substringBefore('~').takeIf { it.isNotBlank() }
-    return FeedLocationDisplay(worldId, instance)
+    val access = when {
+        value.contains("~hidden(") -> FeedLocationAccess.FriendsPlus
+        value.contains("~friends(") -> FeedLocationAccess.Friends
+        value.contains("~private(") && value.contains("~canRequestInvite") -> FeedLocationAccess.InvitePlus
+        value.contains("~private(") -> FeedLocationAccess.Invite
+        value.contains("~group(") -> FeedLocationAccess.Group
+        else -> FeedLocationAccess.Public
+    }
+    return FeedLocationDisplay(worldId, instance, access)
 }
 
 data class FeedCursor(val createdAt: String, val rowId: Long)

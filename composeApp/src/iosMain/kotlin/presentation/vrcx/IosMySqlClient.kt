@@ -226,10 +226,10 @@ private fun readLength(packet: ByteArray, start: Int): Triple<Long, Int, String?
 
 private class MySqlPacketBuilder {
     private val bytes = mutableListOf<Byte>()
-    fun byte(value: Int) { bytes += value.toByte() }
-    fun intValue(value: Int) { repeat(4) { byte(value shr (it * 8)) } }
-    fun zeros(count: Int) { repeat(count) { byte(0) } }
-    fun cstring(value: String) { bytes += value.encodeToByteArray().toList(); byte(0) }
-    fun lengthBytes(value: ByteArray) { byte(value.size); bytes += value.toList() }
+    fun byte(value: Int): MySqlPacketBuilder { bytes += value.toByte(); return this }
+    fun intValue(value: Int): MySqlPacketBuilder { repeat(4) { byte(value shr (it * 8)) }; return this }
+    fun zeros(count: Int): MySqlPacketBuilder { repeat(count) { byte(0) }; return this }
+    fun cstring(value: String): MySqlPacketBuilder { bytes += value.encodeToByteArray().toList(); byte(0); return this }
+    fun lengthBytes(value: ByteArray): MySqlPacketBuilder { byte(value.size); bytes += value.toList(); return this }
     fun build() = bytes.toByteArray()
 }

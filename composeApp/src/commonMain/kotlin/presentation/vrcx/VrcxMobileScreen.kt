@@ -67,11 +67,18 @@ import io.github.vrcmteam.vrcm.presentation.extensions.ignoredFormat
 import io.github.vrcmteam.vrcm.presentation.settings.locale.LocaleStrings
 import io.github.vrcmteam.vrcm.presentation.settings.locale.strings
 import io.github.vrcmteam.vrcm.presentation.theme.GameColor
+import io.github.vrcmteam.vrcm.storage.UserProfileCacheStore
+import io.github.vrcmteam.vrcm.storage.data.UserProfileCache
 import org.koin.compose.koinInject
 import kotlin.coroutines.cancellation.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.TimeoutCancellationException
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -80,11 +87,12 @@ import kotlin.time.Instant
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
 
+private const val MAX_CONCURRENT_USER_FETCH = 6
+
 /** 只读浏览首页：真实连接远程 PostgreSQL 并分页展示 VRCX Feed，绝不生成示例日志。 */
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
-fun VrcxMobileScreen(
-    previewEvents: List<VrcxFeedEvent>? = null,
+fun VrcxMobileScreen(    previewEvents: List<VrcxFeedEvent>? = null,
     onExit: (() -> Unit)? = null,
     embeddedInHome: Boolean = false,
 ) {
@@ -100,6 +108,7 @@ fun VrcxMobileScreen(
     var userIcons by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
     val listState = rememberLazyListState()
     val usersApi: UsersApi = koinInject()
+    val userProfileCacheStore: UserProfileCacheStore = koinInject()
     val locale = strings
 
     /** 预览模式使用与远程查询一致的包含式筛选；正常模式使用远端查询结果。 */
@@ -176,17 +185,43 @@ fun VrcxMobileScreen(
         }
     }
     LaunchedEffect(events, isPreview) {
-        if (isPreview || SharedFlowCentre.currentSession.value == null) return@LaunchedEffect
-        val missingIds = events.asSequence()
+        val session = SharedFlowCentre.currentSession.value
+        if (isPreview || session == null) return@LaunchedEffect
+        val ownerUserId = session.account.userId
+        val allIds = events.asSequence()
             .map(VrcxFeedEvent::userId)
             .filter { it.isNotBlank() && it !in userIcons }
             .distinct()
             .toList()
+        if (allIds.isEmpty()) return@LaunchedEffect
+        // 优先读本地资料缓存，命中的头像秒出，只有缺失的才补拉网络
+        val cached = withContext(Dispatchers.Default) {
+            allIds.mapNotNull { userId ->
+                runCatching {
+                    userProfileCacheStore.load(ownerUserId, userId)
+                        ?.user?.iconUrl?.let { userId to it }
+                }.getOrNull()
+            }.toMap()
+        }
+        if (cached.isNotEmpty()) userIcons = userIcons + cached
+        val missingIds = allIds.filter { it !in userIcons }
         if (missingIds.isEmpty()) return@LaunchedEffect
         val loaded = withContext(Dispatchers.Default) {
-            missingIds.mapNotNull { userId ->
-                runCatching { userId to usersApi.fetchUser(userId).iconUrl }.getOrNull()
-            }.toMap()
+            // 参考 VRCX 桌面端限流思路：并发拉取，避免打满 VRChat API 触发 429 退避
+            val gate = Semaphore(MAX_CONCURRENT_USER_FETCH)
+            coroutineScope {
+                missingIds.map { userId ->
+                    async {
+                        gate.withPermit {
+                            runCatching {
+                                val user = usersApi.fetchUser(userId)
+                                userProfileCacheStore.save(ownerUserId, userId, UserProfileCache(user = user))
+                                userId to user.iconUrl
+                            }.getOrNull()
+                        }
+                    }
+                }.awaitAll().filterNotNull().toMap()
+            }
         }
         if (loaded.isNotEmpty()) userIcons = userIcons + loaded
     }

@@ -43,6 +43,8 @@ kotlin {
             implementation(libs.awebp)
 
             implementation(libs.ktor.client.okhttp)
+            implementation(libs.pgjdbc)
+            implementation(libs.mariadb)
         }
 
         androidUnitTest.dependencies {
@@ -64,6 +66,8 @@ kotlin {
             implementation(libs.ktor.client.okhttp)
             implementation(libs.jna.platform)
             implementation(libs.androidx.sqlite.bundled)
+            implementation(libs.pgjdbc)
+            implementation(libs.mariadb)
         }
 
         val desktopTest by getting

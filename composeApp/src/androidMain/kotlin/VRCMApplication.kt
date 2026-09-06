@@ -5,6 +5,7 @@ import io.github.vrcmteam.vrcm.core.shared.SharedFlowCentre
 import io.github.vrcmteam.vrcm.di.commonModules
 import io.github.vrcmteam.vrcm.di.modules.platformModule
 import io.github.vrcmteam.vrcm.presentation.settings.SettingsModel
+import io.github.vrcmteam.vrcm.presentation.vrcx.vrcxAndroidApplicationContext
 import io.github.vrcmteam.vrcm.service.FriendOnlineNotificationService
 import io.github.vrcmteam.vrcm.service.VrchatStatusNotificationService
 import io.github.vrcmteam.vrcm.storage.SettingsDao
@@ -25,6 +26,7 @@ class VRCMApplication : Application() {
 
     override fun onCreate() {
         super.onCreate()
+        vrcxAndroidApplicationContext = applicationContext
         val app = startKoin {
             androidLogger()
             androidContext(this@VRCMApplication)

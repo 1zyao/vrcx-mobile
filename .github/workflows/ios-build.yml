@@ -1,0 +1,33 @@
+name: iOS build
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  ios-framework:
+    runs-on: macos-latest
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: gradle
+
+      - name: Print tool versions
+        run: |
+          xcodebuild -version
+          java -version
+
+      - name: Build iOS simulator framework
+        run: bash ./gradlew :composeApp:linkDebugFrameworkIosSimulatorArm64 --no-daemon

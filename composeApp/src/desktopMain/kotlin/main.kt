@@ -26,6 +26,7 @@ import io.github.vrcmteam.vrcm.core.shared.AppConst.APP_NAME
 import io.github.vrcmteam.vrcm.di.commonModules
 import io.github.vrcmteam.vrcm.di.modules.platformModule
 import io.github.vrcmteam.vrcm.presentation.compoments.DesktopWindowTitleBar
+import io.github.vrcmteam.vrcm.presentation.vrcx.desktopPreviewFeed
 import org.jetbrains.compose.resources.painterResource
 import org.koin.core.context.startKoin
 import vrcm.composeapp.generated.resources.Res
@@ -37,6 +38,8 @@ fun main() = run {
         printLogger()
         modules(commonModules + platformModule)
     }
+    val previewEvents =
+        if (System.getenv("VRCX_PREVIEW") == "1") desktopPreviewFeed() else null
     application {
         val windowState = rememberWindowState(
             width = 1100.dp,
@@ -54,12 +57,15 @@ fun main() = run {
                 window.minimumSize = Dimension(760, 560)
             }
 //            AppDesktopPreview()
-            App(windowChrome = {
-                DesktopWindowTitleBar(
-                    windowState = windowState,
-                    onCloseRequest = ::exitApplication,
-                )
-            })
+            App(
+                windowChrome = {
+                    DesktopWindowTitleBar(
+                        windowState = windowState,
+                        onCloseRequest = ::exitApplication,
+                    )
+                },
+                previewEvents = previewEvents,
+            )
         }
     }
 }

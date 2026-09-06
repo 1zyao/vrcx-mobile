@@ -8,7 +8,7 @@ kotlin = "2.2.20"
 kotlinx-coroutines = "1.10.1"
 kotlinx-atomicfu = "0.27.0"
 kotlinx-datetime = "0.7.1"
-android-minSdk = "24"
+android-minSdk = "26"
 android-compileSdk = "36"
 android-targetSdk = "35"
 androidx-activityCompose = "1.10.1"
@@ -28,6 +28,8 @@ robolectric = "4.16.1"
 filekit = "0.11.0"
 qrose = "1.0.1"
 jna = "5.17.0"
+pgjdbc = "42.7.13"
+mariadb = "3.5.10"
 okio = "3.16.4"
 awebp = "3.0.5"
 room = "2.8.4"
@@ -77,6 +79,8 @@ coil-network-ktor = { module = "io.coil-kt.coil3:coil-network-ktor3", version.re
 
 robolectric = { module = "org.robolectric:robolectric", version.ref = "robolectric" }
 jna-platform = { module = "net.java.dev.jna:jna-platform", version.ref = "jna" }
+pgjdbc = { module = "org.postgresql:postgresql", version.ref = "pgjdbc" }
+mariadb = { module = "org.mariadb.jdbc:mariadb-java-client", version.ref = "mariadb" }
 okio = { module = "com.squareup.okio:okio", version.ref = "okio" }
 okio-fakefilesystem = { module = "com.squareup.okio:okio-fakefilesystem", version.ref = "okio" }
 awebp = { module = "com.github.penfeizhou.android.animation:awebp", version.ref = "awebp" }

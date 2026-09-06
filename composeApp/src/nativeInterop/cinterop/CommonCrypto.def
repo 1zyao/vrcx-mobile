@@ -1,0 +1,3 @@
+headers = CommonCrypto/CommonDigest.h CommonCrypto/CommonHMAC.h
+compilerOpts = -framework CommonCrypto
+linkerOpts = -framework CommonCrypto

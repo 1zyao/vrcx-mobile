@@ -1,125 +1,146 @@
-<div align="center">
+# VRCX Mobile
 
-# <img src="image/Logo.png" width="50" height="50" alt="VRCM logo"/> VRCM
+VRCX Mobile 是一个使用 Kotlin Multiplatform 和 Compose Multiplatform 编写的 VRCX 远程日志只读浏览器。
 
-**Languages / 语言 / 言語:**<br>
-[English](README.md) · [中文](README_ZH.md) · [日本語](README_JP.md)
+它不负责采集 VRChat 日志。电脑上的 VRCX-K 继续负责采集和写入，手机或桌面客户端通过只读数据库账号查看 Feed 记录。
 
-[![License](https://img.shields.io/badge/License-MIT-blue.svg?style=flat&labelColor=6e6e73)](https://opensource.org/licenses/MIT)
-[![GitHub release](https://img.shields.io/github/release/vrcm-team/VRCM.svg?style=flat&labelColor=6e6e73)](https://github.com/vrcm-team/VRCM/releases/latest)
-[![Downloads](https://img.shields.io/github/downloads/vrcm-team/VRCM/total?style=flat&labelColor=6e6e73&color=6451f1)](https://github.com/vrcm-team/VRCM/releases/latest)
-[![Android](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/vrcm-team/VRCM/main/badge-data/android-installer-size.json&style=flat)](https://github.com/vrcm-team/VRCM/releases/latest)
-[![iOS](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/vrcm-team/VRCM/main/badge-data/ios-installer-size.json&style=flat)](https://github.com/vrcm-team/VRCM/releases/latest)
-[![MacOS](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/vrcm-team/VRCM/main/badge-data/desktop-installer-size.json&style=flat)](https://github.com/vrcm-team/VRCM/releases/latest)
-[![Windows](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/vrcm-team/VRCM/main/badge-data/windows-installer-size.json&style=flat)](https://github.com/vrcm-team/VRCM/releases/latest)
-[![Kotlin](https://img.shields.io/badge/Kotlin-2.2.20-blue.svg?style=flat&labelColor=6e6e73&logo=kotlin)](https://kotlinlang.org)
-[![Compose Multiplatform](https://img.shields.io/badge/Compose%20Multiplatform-1.10.3-blue?style=flat&labelColor=6e6e73)](https://www.jetbrains.com/lp/compose-multiplatform/)
+```text
+VRCX-K Collector -> PostgreSQL / MySQL / MariaDB <- VRCX Mobile Viewer
+```
 
-## Bring your VRChat social life to your phone
+## 当前功能
 
-<div align="center">
-  <img src="image/MultiPlatformPreview.png" width="720" alt="VRCM cross-platform VRChat social companion preview"/>
-</div>
+- 浏览 VRCX Feed 时间线
+- 查看位置、状态、简介、模型、上线和下线记录
+- 显示世界名称和简短房间标识
+- 使用 VRCX 风格的包含式模糊搜索
+- 按 Feed 类型筛选
+- 使用游标分页加载历史记录
+- 在应用内填写、测试和保存数据库连接
+- 自动发现数据库中的 VRCX 账号
+- 数据库连接使用只读事务
+- Android、Desktop 使用 JDBC
+- iOS 使用 sqlx4k Native
 
-VRCM is a cross-platform VRChat companion focused on social connection and convenience. It goes beyond showing who is online: explore your social circles, remember time spent together, and move smoothly from shared links to worlds, interactions, and real-world meetups.
+## 不包含的功能
 
-> VRCM follows a different product direction from VRCX: VRCX puts greater emphasis on desktop logging and information management, while VRCM prioritizes mobile social connection, convenient interaction, and availability on the go.
-> Desktop builds will continue to receive basic support and essential maintenance, but deeper desktop development is not a near-term priority, nor is matching VRCX's desktop feature depth.
+- 不采集手机本地 VRChat 日志
+- 不实现 VRChat 登录
+- 不提供任意 SQL 查询
+- 不修改数据库内容
+- 不包含 Gateway 或中转服务器
+- 不使用远程 SQLite
+- 不提供后台常驻采集
 
-[Download the latest release](https://github.com/vrcm-team/VRCM/releases/latest) · [What's new in 1.1.1](docs/releases/1.1.1.md)
+## 数据库要求
 
-</div>
+VRCX Mobile 连接由 VRCX-K 创建的远程数据库。当前支持：
 
-## What makes VRCM different
+- PostgreSQL
+- MySQL
+- MariaDB
 
-### Social graph and shared history
+建议创建专用数据库只读账号。应用层会设置只读事务，但数据库账号本身也必须只有 `SELECT` 权限。
 
-- **Friend network**: build community and ego-centered views from mutual-friend relationships, inspect connections, zoom, refresh, and reuse locally cached graph data.
-- **Friend activity history**: revisit online/offline events, world changes, status updates, and bio changes from a profile.
-- **Time together**: see when you last met, how often you met, and how long you played together.
-- **Mutual context**: discover mutual friends and mutual groups without leaving the profile flow.
+连接信息在应用的连接设置页面中填写，不需要导入外部 JSON 文件：
 
-<div align="center">
-  <img src="image/Feature-Friend-Network.png" width="300" alt="Privacy-redacted friend network on a phone"/>
-</div>
+- 数据库类型
+- 地址和端口
+- 数据库名称
+- 用户名和密码
+- TLS 开关
 
-> Activity and time-together data cover only what VRCM observed while running. Android can continue observing in the background when background monitoring is enabled. This is not a complete VRChat account history.
+保存时应用会从数据库元数据中发现可用的 VRCX 账号并要求选择。账号前缀不会写进 SQL 标识符，应用只接受符合 VRCX 命名规则的值。
 
-### Mobile shortcuts and in-game interaction
+不要把数据库密码、连接配置或生产数据库地址提交到仓库、日志或 Issue。
 
-- **Clipboard recognition**: copy a VRChat user, world, group, or avatar URL/ID, return to VRCM, confirm, and jump directly to it.
-- **Open web links in VRCM**: Android can hand supported `vrchat.com` links directly to the app.
-- **Native sharing**: share public profile links through the Android/iOS share sheet; Desktop falls back to copying the URL.
-- **Act immediately**: inspect a friend's instance, invite yourself, send several kinds of Boop, and handle friend requests or invitations.
+## 平台状态
 
-### Two-way phone gallery and VRChat+ Gallery workflow
-
-- **From phone to VRChat**: select an image from your phone and upload it to VRChat+ Gallery; crop and preview Prints before uploading.
-- **From VRChat to phone**: save photos taken in-game and synced to Gallery into the system photo library, ready to share through your gallery or messaging apps.
-- **Direct image sharing**: open a Gallery or Print image and send the original image through the native Android/iOS share sheet; sharing does not write another copy to the photo library.
-- **Mobile photo management**: browse, zoom, download, and batch-delete Gallery content. Non-VRC+ users can still view Prints.
-
-<div align="center">
-  <img src="image/Feature-Gallery-Mobile.png" width="360" alt="VRChat+ Gallery on an Android phone, showing photo categories and the upload action"/>
-</div>
-
-### Android real-time alerts
-
-- Filter online/offline alerts by favorite group with allow/deny modes and per-friend overrides.
-- Receive Boop, friend-request, group event, and VRChat service-status alerts.
-- Keep optional background monitoring active and jump to notification or battery-management settings when needed.
-- Review and act on events from the dedicated in-app notification center.
-
-<div align="center">
-  <img src="image/Feature-Android-Notifications.png" width="300" alt="Android notification and background-monitoring settings"/>
-</div>
-
-### Meetup name card
-
-- Long-press your avatar on Home to open a full-screen card designed to be held up at an in-person meetup.
-- Choose Info Bar, Spotlight, or Side Tag templates with independent portrait and landscape layouts.
-- Use your profile background, a local photo, or VRChat Gallery, and include status, languages, group identity, and profile effects.
-- Add up to four QR codes for your VRChat profile and profile social links, then save the card to the system gallery.
-
-<div align="center">
-  <img src="image/Feature-Meetup-Card.png" width="300" alt="Full-screen meetup name card on a phone"/>
-</div>
-
-## More capabilities
-
-- **Profile and content**: edit status, bio, languages, pronouns, and social links; browse created worlds, avatars, and favorite worlds.
-- **Worlds and groups**: search worlds and groups; inspect instances, recently visited worlds, group posts, members, galleries, and group instances.
-- **Avatar management**: view avatar details, switch or copy available avatars, and edit the name, description, and cover of avatars you uploaded.
-- **Accounts and UI**: multiple accounts, email/2FA authentication, four UI languages, themes, shared transitions, and adaptive widescreen layouts.
-
-## Platform support
-
-| Platform | Status | Notes |
+| 平台 | 状态 | 数据库实现 |
 | --- | --- | --- |
-| Android | Full | Includes native alerts, background friend monitoring, and VRChat web-link handling |
-| iOS | Supported | Requires [self-signing](self-signing.md); Android background system alerts are not available |
-| Desktop | Supported | Native Windows, macOS, and Linux packages; sharing falls back to copying links |
+| Android | 可构建，可测试 | PostgreSQL JDBC、MariaDB Connector/J |
+| Windows / Desktop | 可构建，可测试 | PostgreSQL JDBC、MariaDB Connector/J |
+| iOS | 可构建 IPA | sqlx4k Native |
 
-## Technology
+iOS 构建需要 macOS/Xcode。GitHub Actions 使用 macOS Runner 构建设备 IPA；当前 IPA 不包含正式 App Store 签名，越狱设备或用户自己的签名流程可用于安装测试。
 
-- Kotlin Multiplatform 2.2.20 and Compose Multiplatform 1.10.3
-- Ktor, kotlinx.serialization, Room, and Coil
-- Koin, Lifecycle ViewModel, Navigation 3, and Material 3 Adaptive
-- Android minSdk 24, targetSdk 35, compileSdk 36; Java 21
+当前限制：iOS 数据库连接尚未完成真实设备端到端验证；iOS TLS 和数据库认证能力以 sqlx4k Native 实际支持为准。
 
-## Privacy and disclaimer
+## 构建
 
-- Friend activity, caches, and meetup-card configuration remain on the local device. See the [privacy policy](privacy-policy.md).
-- VRCM is not affiliated with VRChat Inc. and does not represent its views or opinions.
-- VRCM does not modify the game client. Use it responsibly and follow the [VRChat Terms of Service](https://hello.vrchat.com/legal) and applicable laws.
-- The authors are not responsible for damage caused by using this application.
+环境要求：
 
-## License and contributing
+- JDK 21
+- Gradle Wrapper
+- Android SDK 36（构建 Android 时）
+- macOS 和 Xcode（构建 iOS 时）
 
-VRCM is open source under the [MIT License](LICENSE). Code contributions, bug reports, and feature proposals are welcome.
+构建 Desktop：
 
-<div align="center">
+```bash
+./gradlew :composeApp:compileKotlinDesktop
+./gradlew :composeApp:run
+```
 
-[Report an issue](https://github.com/vrcm-team/VRCM/issues) · [Suggest a feature](https://github.com/vrcm-team/VRCM/discussions)
+启动 Desktop 预览数据：
 
-</div>
+```bash
+VRCX_PREVIEW=1 ./gradlew :composeApp:run
+```
+
+构建 Android Debug APK：
+
+```bash
+./gradlew :composeApp:assembleDebug
+```
+
+构建 iOS Framework：
+
+```bash
+./gradlew :composeApp:linkDebugFrameworkIosArm64
+```
+
+设备 IPA 由 GitHub Actions 在 macOS Runner 上构建。构建工作流位于 `.github/workflows/ios-build.yml`。
+
+## 项目结构
+
+```text
+composeApp/
+  src/commonMain/   Feed 模型、查询、Repository、Compose UI
+  src/androidMain/  Android JDBC 和平台实现
+  src/desktopMain/  Desktop JDBC 和平台实现
+  src/iosMain/      iOS Native 平台实现
+iosApp/             iOS Xcode 应用壳
+```
+
+核心数据流：
+
+```text
+连接设置
+  -> 只读数据库客户端
+  -> FeedQuery 固定参数化查询
+  -> FeedRepository
+  -> Compose 页面
+```
+
+数据库表结构沿用 VRCX-K 的 Feed 表：`feed_gps`、`feed_status`、`feed_bio`、`feed_avatar` 和 `feed_online_offline`。
+
+## 安全说明
+
+- 使用数据库专用只读账号
+- 不开放任意 SQL
+- 用户输入通过参数绑定
+- 数据库表名和账号前缀经过白名单校验
+- 生产数据库建议通过 VPN 或私有网络访问
+- 不要直接把数据库端口暴露到公网
+- 不要在日志、截图或 Issue 中公开密码
+
+## 许可证
+
+本项目使用 MIT License，详见 [LICENSE](LICENSE)。
+
+VRCX Mobile 与 VRChat、VRCX-K 无隶属关系。使用时请遵守 VRChat 的服务条款和适用法律。
+
+## 反馈
+
+请在 [GitHub Issues](https://github.com/1zyao/vrcx-mobile/issues) 提交问题，并附上复现步骤、平台和相关日志。提交日志前请删除数据库地址、用户名、密码和其他敏感信息。

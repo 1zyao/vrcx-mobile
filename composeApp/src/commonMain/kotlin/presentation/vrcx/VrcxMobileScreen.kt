@@ -200,7 +200,9 @@ fun VrcxMobileScreen(    previewEvents: List<VrcxFeedEvent>? = null,
         // Feed 里几乎全是好友，放最前面避免被后续串行 Room 查询卡住。
         val fromFriends = withContext(Dispatchers.Default) {
             allIds.mapNotNull { userId ->
-                friendService.friendMap[userId]?.userIcon?.let { userId to it }
+                friendService.friendMap[userId]?.iconUrl
+                    ?.takeIf(String::isNotBlank)
+                    ?.let { userId to it }
             }.toMap()
         }
         if (fromFriends.isNotEmpty()) userIcons = userIcons + fromFriends

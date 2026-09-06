@@ -196,23 +196,28 @@ fun VrcxMobileScreen(    previewEvents: List<VrcxFeedEvent>? = null,
             .distinct()
             .toList()
         if (allIds.isEmpty()) return@LaunchedEffect
-        // 优先读本地资料缓存，命中的头像秒出，只有缺失的才补拉网络
-        val cached = withContext(Dispatchers.Default) {
-            allIds.mapNotNull { userId ->
-                runCatching {
-                    userProfileCacheStore.load(ownerUserId, userId)
-                        ?.user?.iconUrl?.let { userId to it }
-                }.getOrNull()
-            }.toMap()
-        }
-        if (cached.isNotEmpty()) userIcons = userIcons + cached
-        // 对齐主页机制：好友头像在 FriendService 内存缓存里，命中即秒出
+        // 对齐主页机制：好友头像在 FriendService 内存缓存里，命中即秒出。
+        // Feed 里几乎全是好友，放最前面避免被后续串行 Room 查询卡住。
         val fromFriends = withContext(Dispatchers.Default) {
             allIds.mapNotNull { userId ->
                 friendService.friendMap[userId]?.userIcon?.let { userId to it }
             }.toMap()
         }
         if (fromFriends.isNotEmpty()) userIcons = userIcons + fromFriends
+        // 本地资料缓存兜底，并行查询避免逐条阻塞
+        val cached = withContext(Dispatchers.Default) {
+            coroutineScope {
+                allIds.filterNot { it in userIcons }.map { userId ->
+                    async {
+                        runCatching {
+                            userProfileCacheStore.load(ownerUserId, userId)
+                                ?.user?.iconUrl?.let { userId to it }
+                        }.getOrNull()
+                    }
+                }.awaitAll().filterNotNull().toMap()
+            }
+        }
+        if (cached.isNotEmpty()) userIcons = userIcons + cached
         val missingIds = allIds.filter { it !in userIcons }
         if (missingIds.isEmpty()) return@LaunchedEffect
         val loaded = withContext(Dispatchers.Default) {
